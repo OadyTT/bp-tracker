@@ -1,5 +1,10 @@
 import { useState, useEffect, useRef } from "react";
 
+// ─── VERSION ───────────────────────────────────────────────
+const APP_VERSION = "v1.1.0";
+const BUILD_DATE  = "17 มี.ค. 2568";
+
+// ─── CONSTANTS ─────────────────────────────────────────────
 const STORAGE_KEY = "bp-records-v1";
 const PATIENT_KEY = "bp-patient-v1";
 const SCRIPT_URL  = "https://script.google.com/macros/s/AKfycbxN0gf9mWMF9I4fCazGo4WhyWONrStPMiwuM-Xnc6GZSRk7iXf1V6E_HR5NPPkWB2eZ9w/exec";
@@ -8,8 +13,8 @@ const todayISO = () => new Date().toISOString().split("T")[0];
 const toThai = (iso) => {
   if (!iso) return "";
   const [y, m, d] = iso.split("-");
-  const MONTHS = ["","ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
-  return `${parseInt(d)} ${MONTHS[parseInt(m)]} ${parseInt(y)+543}`;
+  const M = ["","ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
+  return `${parseInt(d)} ${M[parseInt(m)]} ${parseInt(y)+543}`;
 };
 
 const BP_LEVELS = ["ปกติ","สูงเล็กน้อย","สูงระดับ 1","สูงระดับ 2"];
@@ -22,15 +27,14 @@ const bpStatus = (sys, dia) => {
   return                        { label:"สูงระดับ 2",   bg:"#fee2e2", fg:"#991b1b", bar:"#ef4444" };
 };
 
-// localStorage helpers
 const lsGet = (key, fallback) => {
-  try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; }
-  catch(e) { return fallback; }
+  try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; }
 };
 const lsSet = (key, value) => {
-  try { localStorage.setItem(key, JSON.stringify(value)); } catch(e) {}
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
 };
 
+// ─── INPUT COMPONENT ───────────────────────────────────────
 const Input = ({ label, value, onChange, type="text", placeholder, unit }) => (
   <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
     <label style={{ fontSize:17, fontWeight:700, color:"#334155" }}>{label}</label>
@@ -53,6 +57,7 @@ const Input = ({ label, value, onChange, type="text", placeholder, unit }) => (
   </div>
 );
 
+// ─── MAIN APP ──────────────────────────────────────────────
 export default function App() {
   const [tab,           setTab]           = useState("record");
   const [records,       setRecords]       = useState([]);
@@ -62,6 +67,7 @@ export default function App() {
   const [saving,        setSaving]        = useState(false);
   const [capturing,     setCapturing]     = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [showAbout,     setShowAbout]     = useState(false);
   const reportRef = useRef(null);
 
   const [form, setForm] = useState({
@@ -73,7 +79,6 @@ export default function App() {
     setRecords(lsGet(STORAGE_KEY, []));
     setPatient(lsGet(PATIENT_KEY, { name:"", phone:"" }));
     setLoaded(true);
-    // load html2canvas
     if (!window._h2cLoaded) {
       window._h2cLoaded = true;
       const sc = document.createElement("script");
@@ -93,7 +98,7 @@ export default function App() {
     setCapturing(true);
     try {
       const canvas = await window.html2canvas(reportRef.current, {
-        scale: 2.5, useCORS: true, backgroundColor: "#ffffff", logging: false,
+        scale:2.5, useCORS:true, backgroundColor:"#ffffff", logging:false,
       });
       const dataUrl = canvas.toDataURL("image/jpeg", 0.93);
       if (navigator.canShare) {
@@ -110,10 +115,42 @@ export default function App() {
       a.download = `ความดัน_${patient.name||"record"}_${todayISO()}.jpg`;
       a.click();
       toast$("บันทึกรูปภาพแล้ว ✓");
-    } catch(err) {
-      toast$("เกิดข้อผิดพลาด ลองใหม่","err");
-    }
+    } catch { toast$("เกิดข้อผิดพลาด ลองใหม่","err"); }
     setCapturing(false);
+  };
+
+  // ── Export JSON backup ──
+  const exportBackup = () => {
+    const data = { version: APP_VERSION, patient, records, exportedAt: new Date().toISOString() };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type:"application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `bp-backup_${patient.name||"record"}_${todayISO()}.json`;
+    a.click();
+    toast$("สำรองข้อมูลแล้ว ✓");
+  };
+
+  // ── Import JSON backup ──
+  const importBackup = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const data = JSON.parse(ev.target.result);
+        if (data.records) {
+          setRecords(data.records);
+          lsSet(STORAGE_KEY, data.records);
+        }
+        if (data.patient) {
+          setPatient(data.patient);
+          lsSet(PATIENT_KEY, data.patient);
+        }
+        toast$(`นำเข้าข้อมูล ${data.records?.length||0} รายการสำเร็จ ✓`);
+      } catch { toast$("ไฟล์ไม่ถูกต้อง","err"); }
+    };
+    reader.readAsText(file);
+    e.target.value = "";
   };
 
   // ── Submit ──
@@ -127,20 +164,10 @@ export default function App() {
       : [...records, entry].sort((a,b)=>a.date.localeCompare(b.date));
     setRecords(next);
     lsSet(STORAGE_KEY, next);
-
-    // sync Google Sheets
     try {
-      await fetch(SCRIPT_URL, {
-        method: "POST",
-        mode: "no-cors",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...entry, patientName: patient.name }),
-      });
+      await fetch(SCRIPT_URL, { method:"POST", mode:"no-cors", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ ...entry, patientName:patient.name }) });
       toast$("บันทึก + ซิงค์ Google Sheets ✓");
-    } catch(e) {
-      toast$("บันทึกแล้ว (ซิงค์ไม่สำเร็จ)","warn");
-    }
-
+    } catch { toast$("บันทึกแล้ว (ซิงค์ไม่สำเร็จ)","warn"); }
     setForm({ date:todayISO(), morningTime:"", morningSys:"", morningDia:"", morningPulse:"", eveningTime:"", eveningSys:"", eveningDia:"", eveningPulse:"" });
     setSaving(false);
     setTab("history");
@@ -154,11 +181,6 @@ export default function App() {
     toast$("ลบรายการแล้ว");
   };
 
-  const savePatient = () => {
-    lsSet(PATIENT_KEY, patient);
-    toast$("บันทึกข้อมูลแล้ว");
-  };
-
   const mStatus = bpStatus(form.morningSys, form.morningDia);
   const eStatus = bpStatus(form.eveningSys, form.eveningDia);
 
@@ -169,7 +191,7 @@ export default function App() {
     grid2:    { display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 },
     secTitle: { fontSize:20, fontWeight:800, marginBottom:16, display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" },
     btnMain:  { width:"100%", padding:"18px", background:"linear-gradient(135deg,#0284c7,#075985)", color:"white", border:"none", borderRadius:14, fontSize:20, fontWeight:800, fontFamily:"Sarabun,sans-serif", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:8 },
-    btnGhost: { flex:1, padding:"15px", borderRadius:12, border:"2px solid #0284c7", background:"white", color:"#0284c7", fontSize:18, fontWeight:700, fontFamily:"Sarabun,sans-serif", cursor:"pointer", textAlign:"center" },
+    btnGhost: { flex:1, padding:"15px", borderRadius:12, border:"2px solid #0284c7", background:"white", color:"#0284c7", fontSize:17, fontWeight:700, fontFamily:"Sarabun,sans-serif", cursor:"pointer", textAlign:"center" },
     tabBar:   { position:"fixed", bottom:0, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:520, background:"white", borderTop:"2px solid #e2e8f0", display:"flex", zIndex:100 },
     tabItem:  a => ({ flex:1, padding:"10px 4px 8px", border:"none", background:"none", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:2, color:a?"#0284c7":"#94a3b8", fontFamily:"Sarabun,sans-serif", fontSize:14, fontWeight:a?800:500 }),
     badge:    st => ({ display:"inline-block", padding:"4px 12px", borderRadius:20, fontSize:14, fontWeight:800, background:st.bg, color:st.fg }),
@@ -202,12 +224,7 @@ export default function App() {
 
       {/* Toast */}
       {toast && (
-        <div className="no-print" style={{
-          position:"fixed", top:18, left:"50%", transform:"translateX(-50%)",
-          background: toast.type==="err"?"#ef4444": toast.type==="warn"?"#f59e0b":"#22c55e",
-          color:"white", padding:"15px 28px", borderRadius:30, fontSize:18, fontWeight:700,
-          zIndex:9999, boxShadow:"0 4px 24px rgba(0,0,0,0.18)", whiteSpace:"nowrap",
-        }}>{toast.msg}</div>
+        <div className="no-print" style={{ position:"fixed", top:18, left:"50%", transform:"translateX(-50%)", background:toast.type==="err"?"#ef4444":toast.type==="warn"?"#f59e0b":"#22c55e", color:"white", padding:"15px 28px", borderRadius:30, fontSize:18, fontWeight:700, zIndex:9999, boxShadow:"0 4px 24px rgba(0,0,0,0.18)", whiteSpace:"nowrap" }}>{toast.msg}</div>
       )}
 
       {/* Delete Modal */}
@@ -221,6 +238,46 @@ export default function App() {
               <button onClick={()=>setDeleteConfirm(null)} style={{ flex:1,padding:16,borderRadius:12,border:"2px solid #e2e8f0",background:"white",fontSize:18,fontFamily:"Sarabun,sans-serif",cursor:"pointer",fontWeight:600 }}>ยกเลิก</button>
               <button onClick={()=>delRecord(deleteConfirm.id)} style={{ flex:1,padding:16,borderRadius:12,border:"none",background:"#ef4444",color:"white",fontSize:18,fontWeight:800,fontFamily:"Sarabun,sans-serif",cursor:"pointer" }}>ลบ</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* About Modal */}
+      {showAbout && (
+        <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",padding:24 }}>
+          <div style={{ background:"white",borderRadius:22,padding:28,width:"100%",maxWidth:360 }}>
+            <div style={{ textAlign:"center", marginBottom:16 }}>
+              <div style={{ fontSize:44 }}>💓</div>
+              <div style={{ fontWeight:800, fontSize:22, color:"#0284c7" }}>บันทึกความดันโลหิต</div>
+              <div style={{ fontSize:16, color:"#64748b", marginTop:4 }}>Home BP Tracker</div>
+            </div>
+            <div style={{ background:"#f0f9ff", borderRadius:14, padding:16, marginBottom:16 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", marginBottom:8 }}>
+                <span style={{ fontSize:16, color:"#475569" }}>เวอร์ชัน</span>
+                <span style={{ fontSize:16, fontWeight:800, color:"#0284c7" }}>{APP_VERSION}</span>
+              </div>
+              <div style={{ display:"flex", justifyContent:"space-between", marginBottom:8 }}>
+                <span style={{ fontSize:16, color:"#475569" }}>อัปเดต</span>
+                <span style={{ fontSize:16, fontWeight:600 }}>{BUILD_DATE}</span>
+              </div>
+              <div style={{ display:"flex", justifyContent:"space-between" }}>
+                <span style={{ fontSize:16, color:"#475569" }}>รายการทั้งหมด</span>
+                <span style={{ fontSize:16, fontWeight:800, color:"#166534" }}>{records.length} รายการ</span>
+              </div>
+            </div>
+
+            {/* Data separation info */}
+            <div style={{ background:"#fefce8", borderRadius:14, padding:14, marginBottom:16, fontSize:15, lineHeight:1.7, color:"#713f12" }}>
+              <div style={{ fontWeight:800, marginBottom:4 }}>💾 ข้อมูลของคุณ</div>
+              ข้อมูลเก็บในมือถือของคุณเท่านั้น <strong>ไม่ปนกับคนอื่น</strong> แต่ละคนที่เปิดแอปบนมือถือตัวเองจะมีข้อมูลแยกกัน ✅
+            </div>
+
+            <div style={{ background:"#fee2e2", borderRadius:14, padding:14, marginBottom:16, fontSize:15, lineHeight:1.7, color:"#991b1b" }}>
+              <div style={{ fontWeight:800, marginBottom:4 }}>⚠️ คำเตือน</div>
+              ห้ามล้างแคชเบราว์เซอร์หรือลบข้อมูลแอป เพราะข้อมูลจะหายถาวร ควร <strong>สำรองข้อมูล</strong> ไว้เสมอ
+            </div>
+
+            <button onClick={()=>setShowAbout(false)} style={{ ...S.btnMain }}>ปิด</button>
           </div>
         </div>
       )}
@@ -261,7 +318,10 @@ export default function App() {
             ))}
           </tbody>
         </table>
-        <div style={{ marginTop:8, fontSize:10 }}>ปกติ: &lt;120/80 mmHg · ชีพจร 60–100 ครั้ง/นาที</div>
+        <div style={{ marginTop:8, fontSize:10, color:"#555", display:"flex", justifyContent:"space-between" }}>
+          <span>ปกติ: &lt;120/80 mmHg · ชีพจร 60–100 ครั้ง/นาที</span>
+          <span>Home BP Tracker {APP_VERSION}</span>
+        </div>
       </div>
 
       {/* ══ SCREEN UI ══ */}
@@ -275,9 +335,14 @@ export default function App() {
               <div style={{ fontSize:28, fontWeight:800 }}>บันทึกความดันโลหิต</div>
               {patient.name && <div style={{ fontSize:18, opacity:.9, marginTop:3 }}>👤 {patient.name}</div>}
             </div>
-            <div style={{ background:"rgba(255,255,255,.2)", borderRadius:14, padding:"8px 16px", textAlign:"center" }}>
-              <div style={{ fontSize:30, fontWeight:800, lineHeight:1 }}>{records.length}</div>
-              <div style={{ fontSize:13, opacity:.85 }}>รายการ</div>
+            <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:6 }}>
+              <div style={{ background:"rgba(255,255,255,.2)", borderRadius:14, padding:"8px 16px", textAlign:"center" }}>
+                <div style={{ fontSize:30, fontWeight:800, lineHeight:1 }}>{records.length}</div>
+                <div style={{ fontSize:13, opacity:.85 }}>รายการ</div>
+              </div>
+              <button onClick={()=>setShowAbout(true)} style={{ background:"rgba(255,255,255,.15)", border:"none", borderRadius:8, color:"white", fontSize:12, padding:"4px 10px", cursor:"pointer", fontFamily:"Sarabun,sans-serif" }}>
+                {APP_VERSION} ℹ️
+              </button>
             </div>
           </div>
         </div>
@@ -288,7 +353,6 @@ export default function App() {
             <div style={S.card}>
               <Input label="📅  วัน เดือน ปี" type="date" value={form.date} onChange={setF("date")}/>
             </div>
-
             <div style={{ ...S.card, borderTop:"4px solid #f59e0b" }}>
               <div style={{ ...S.secTitle, color:"#b45309" }}>
                 <span style={{ fontSize:26 }}>🌅</span> ช่วงเช้า
@@ -299,11 +363,8 @@ export default function App() {
                 <Input label="ตัวบน" type="number" value={form.morningSys} onChange={setF("morningSys")} placeholder="120" unit="mmHg"/>
                 <Input label="ตัวล่าง" type="number" value={form.morningDia} onChange={setF("morningDia")} placeholder="80" unit="mmHg"/>
               </div>
-              <div style={{ marginTop:14 }}>
-                <Input label="ชีพจร" type="number" value={form.morningPulse} onChange={setF("morningPulse")} placeholder="75" unit="bpm"/>
-              </div>
+              <div style={{ marginTop:14 }}><Input label="ชีพจร" type="number" value={form.morningPulse} onChange={setF("morningPulse")} placeholder="75" unit="bpm"/></div>
             </div>
-
             <div style={{ ...S.card, borderTop:"4px solid #0284c7" }}>
               <div style={{ ...S.secTitle, color:"#0369a1" }}>
                 <span style={{ fontSize:26 }}>🌙</span> ช่วงเย็น / กลางคืน
@@ -314,17 +375,13 @@ export default function App() {
                 <Input label="ตัวบน" type="number" value={form.eveningSys} onChange={setF("eveningSys")} placeholder="120" unit="mmHg"/>
                 <Input label="ตัวล่าง" type="number" value={form.eveningDia} onChange={setF("eveningDia")} placeholder="80" unit="mmHg"/>
               </div>
-              <div style={{ marginTop:14 }}>
-                <Input label="ชีพจร" type="number" value={form.eveningPulse} onChange={setF("eveningPulse")} placeholder="75" unit="bpm"/>
-              </div>
+              <div style={{ marginTop:14 }}><Input label="ชีพจร" type="number" value={form.eveningPulse} onChange={setF("eveningPulse")} placeholder="75" unit="bpm"/></div>
             </div>
-
             <div style={{ padding:"0 14px 16px" }}>
               <button onClick={submit} disabled={saving} style={S.btnMain}>
                 {saving ? "⏳  กำลังบันทึก..." : "💾  บันทึกความดัน"}
               </button>
             </div>
-
             <div style={S.card}>
               <div style={{ fontWeight:800, marginBottom:12, fontSize:18 }}>📊 เกณฑ์ระดับความดัน</div>
               {[
@@ -346,7 +403,7 @@ export default function App() {
         {tab==="history" && (
           <div style={{ paddingTop:16 }}>
             <div style={{ padding:"0 14px 12px", display:"flex", gap:10 }}>
-              <button style={S.btnGhost} onClick={()=>setTab("report")}>📸 บันทึกรูป JPG</button>
+              <button style={S.btnGhost} onClick={()=>setTab("report")}>📸 บันทึกรูป</button>
               <button style={S.btnGhost} onClick={()=>window.print()}>🖨️ พิมพ์ A4</button>
             </div>
             {records.length===0 ? (
@@ -361,7 +418,7 @@ export default function App() {
                 const es=bpStatus(r.eveningSys,r.eveningDia);
                 const worst = rank(ms)>=rank(es) ? (ms||es) : (es||ms);
                 return (
-                  <div key={r.id} style={{ ...S.histCard, borderLeftColor: worst?worst.bar:"#e2e8f0" }}>
+                  <div key={r.id} style={{ ...S.histCard, borderLeftColor:worst?worst.bar:"#e2e8f0" }}>
                     <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10 }}>
                       <div>
                         <div style={{ fontWeight:800, fontSize:20 }}>{toThai(r.date)}</div>
@@ -400,30 +457,19 @@ export default function App() {
         {tab==="report" && (
           <div style={{ paddingTop:16 }}>
             <div style={{ padding:"0 14px 12px" }}>
-              <button
-                onClick={saveJPG} disabled={capturing}
-                style={{ ...S.btnMain, background:capturing?"#94a3b8":"linear-gradient(135deg,#0f766e,#0d9488)", marginBottom:10 }}
-              >
+              <button onClick={saveJPG} disabled={capturing} style={{ ...S.btnMain, background:capturing?"#94a3b8":"linear-gradient(135deg,#0f766e,#0d9488)", marginBottom:10 }}>
                 {capturing ? "⏳ กำลังสร้างรูปภาพ..." : "📸 บันทึกเป็นรูปภาพ (JPG)"}
               </button>
               <button onClick={()=>window.print()} style={{ ...S.btnGhost, width:"100%", display:"block" }}>
                 🖨️ พิมพ์ / บันทึก PDF (A4)
               </button>
             </div>
-
             <div ref={reportRef} style={{ margin:"0 14px 14px", background:"white", borderRadius:18, padding:20, boxShadow:"0 2px 8px rgba(0,0,0,0.07)" }}>
               <div style={{ borderBottom:"3px solid #0284c7", paddingBottom:14, marginBottom:14, textAlign:"center" }}>
                 <div style={{ fontSize:20, fontWeight:800, color:"#0369a1" }}>📋 รายงานความดันโลหิต</div>
-                {patient.name && (
-                  <div style={{ fontSize:16, color:"#475569", marginTop:4 }}>
-                    👤 {patient.name}{patient.phone ? `  ·  📞 ${patient.phone}` : ""}
-                  </div>
-                )}
-                <div style={{ fontSize:14, color:"#94a3b8", marginTop:3 }}>
-                  {toThai(todayISO())}  ·  {records.length} รายการ
-                </div>
+                {patient.name && <div style={{ fontSize:16, color:"#475569", marginTop:4 }}>👤 {patient.name}{patient.phone ? `  ·  📞 ${patient.phone}` : ""}</div>}
+                <div style={{ fontSize:14, color:"#94a3b8", marginTop:3 }}>{toThai(todayISO())}  ·  {records.length} รายการ  ·  {APP_VERSION}</div>
               </div>
-
               {records.length===0 ? (
                 <div style={{ textAlign:"center", padding:"30px 0", color:"#94a3b8", fontSize:18 }}>ยังไม่มีข้อมูล</div>
               ) : (
@@ -435,7 +481,7 @@ export default function App() {
                       <th colSpan={2} style={{ border:"1.5px solid #e2e8f0", padding:"9px 6px", background:"#eff6ff", fontSize:14, textAlign:"center" }}>🌙 เย็น</th>
                       <th style={{ border:"1.5px solid #e2e8f0", padding:"9px 6px", background:"#f0f9ff", fontSize:14, textAlign:"center" }}>สถานะ</th>
                     </tr>
-                    <tr style={{ background:"#f8fafc" }}>
+                    <tr>
                       <th style={{ border:"1.5px solid #e2e8f0", padding:"5px 10px" }}></th>
                       {["ตัวบน","ตัวล่าง","ตัวบน","ตัวล่าง"].map((h,i)=>(
                         <th key={i} style={{ border:"1.5px solid #e2e8f0", padding:"5px 8px", background:i<2?"#fefce8":"#eff6ff", fontSize:13, fontWeight:600 }}>{h}</th>
@@ -465,12 +511,7 @@ export default function App() {
                 </table>
               )}
               <div style={{ marginTop:14, padding:"10px 14px", background:"#f8fafc", borderRadius:10, display:"flex", flexWrap:"wrap", gap:"6px 16px" }}>
-                {[
-                  { label:"ปกติ",bg:"#dcfce7",fg:"#166534" },
-                  { label:"สูงเล็กน้อย",bg:"#fef9c3",fg:"#854d0e" },
-                  { label:"สูงระดับ 1",bg:"#ffedd5",fg:"#9a3412" },
-                  { label:"สูงระดับ 2",bg:"#fee2e2",fg:"#991b1b" },
-                ].map(s=>(
+                {[{label:"ปกติ",bg:"#dcfce7",fg:"#166534"},{label:"สูงเล็กน้อย",bg:"#fef9c3",fg:"#854d0e"},{label:"สูงระดับ 1",bg:"#ffedd5",fg:"#9a3412"},{label:"สูงระดับ 2",bg:"#fee2e2",fg:"#991b1b"}].map(s=>(
                   <span key={s.label} style={{ display:"flex", alignItems:"center", gap:5, fontSize:13 }}>
                     <span style={{ width:10, height:10, borderRadius:3, background:s.bg, border:`1.5px solid ${s.fg}`, display:"inline-block" }}/>
                     <span style={{ color:s.fg, fontWeight:700 }}>{s.label}</span>
@@ -490,31 +531,59 @@ export default function App() {
           <div style={{ paddingTop:16 }}>
             <div style={S.card}>
               <div style={{ fontWeight:800, fontSize:20, marginBottom:16 }}>👤 ข้อมูลผู้ป่วย</div>
+              <div style={{ fontSize:15, color:"#64748b", marginBottom:14, background:"#f0f9ff", borderRadius:10, padding:"10px 14px", lineHeight:1.7 }}>
+                ✅ ข้อมูลของคุณแยกอิสระจากผู้ใช้คนอื่น เก็บในมือถือเครื่องนี้เท่านั้น
+              </div>
               <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
                 <Input label="ชื่อ-นามสกุล" value={patient.name} onChange={v=>setPatient(p=>({...p,name:v}))} placeholder="กรอกชื่อ-นามสกุล"/>
                 <Input label="เบอร์โทรศัพท์" type="tel" value={patient.phone} onChange={v=>setPatient(p=>({...p,phone:v}))} placeholder="0xx-xxx-xxxx"/>
-                <button onClick={savePatient} style={S.btnMain}>บันทึกข้อมูล</button>
+                <button onClick={()=>{ lsSet(PATIENT_KEY,patient); toast$("บันทึกข้อมูลแล้ว"); }} style={S.btnMain}>บันทึกข้อมูล</button>
               </div>
             </div>
 
-            {/* Google Sheets status */}
+            {/* Backup / Restore */}
+            <div style={{ ...S.card, borderTop:"4px solid #0284c7" }}>
+              <div style={{ fontWeight:800, fontSize:20, marginBottom:8 }}>💾 สำรองข้อมูล</div>
+              <div style={{ fontSize:15, color:"#64748b", marginBottom:14, lineHeight:1.7 }}>
+                แนะนำให้สำรองข้อมูลทุกสัปดาห์ เผื่อเปลี่ยนมือถือหรือล้างเครื่อง
+              </div>
+              <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+                <button onClick={exportBackup} style={{ ...S.btnMain, background:"linear-gradient(135deg,#0f766e,#0d9488)" }}>
+                  📥 Export สำรองข้อมูล (.json)
+                </button>
+                <label style={{ ...S.btnGhost, display:"block", cursor:"pointer" }}>
+                  📤 Import นำข้อมูลกลับ (.json)
+                  <input type="file" accept=".json" onChange={importBackup} style={{ display:"none" }}/>
+                </label>
+              </div>
+            </div>
+
+            {/* Google Sheets */}
             <div style={{ ...S.card, borderLeft:"5px solid #22c55e" }}>
-              <div style={{ fontWeight:800, fontSize:20, marginBottom:8, color:"#166534" }}>✅ Google Sheets เชื่อมต่อแล้ว</div>
-              <div style={{ fontSize:15, color:"#475569", lineHeight:1.7, wordBreak:"break-all" }}>
-                ข้อมูลจะซิงค์ขึ้น Google Sheets อัตโนมัติทุกครั้งที่กดบันทึก
-              </div>
-              <div style={{ marginTop:10, background:"#f0fdf4", borderRadius:10, padding:"10px 14px", fontSize:13, color:"#166534", fontFamily:"monospace", wordBreak:"break-all" }}>
-                {SCRIPT_URL.slice(0,60)}...
+              <div style={{ fontWeight:800, fontSize:20, marginBottom:6, color:"#166534" }}>✅ Google Sheets เชื่อมต่อแล้ว</div>
+              <div style={{ fontSize:15, color:"#475569", lineHeight:1.7 }}>
+                ข้อมูลซิงค์อัตโนมัติทุกครั้งที่กดบันทึก ข้อมูลทุกเครื่องจะรวมขึ้น Sheet เดียวกัน
               </div>
             </div>
 
+            {/* Version */}
+            <div style={S.card}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                <div>
+                  <div style={{ fontWeight:800, fontSize:18 }}>🏷️ เวอร์ชัน</div>
+                  <div style={{ fontSize:15, color:"#64748b", marginTop:4 }}>อัปเดต {BUILD_DATE}</div>
+                </div>
+                <div style={{ fontSize:24, fontWeight:800, color:"#0284c7" }}>{APP_VERSION}</div>
+              </div>
+            </div>
+
+            {/* Danger */}
             <div style={{ ...S.card, borderTop:"4px solid #ef4444" }}>
               <div style={{ fontWeight:800, fontSize:20, marginBottom:12, color:"#ef4444" }}>⚠️ ล้างข้อมูลทั้งหมด</div>
+              <div style={{ fontSize:15, color:"#64748b", marginBottom:12 }}>แนะนำ Export สำรองไว้ก่อนลบ</div>
               <button onClick={()=>{
-                if (window.confirm("ยืนยันลบข้อมูลทั้งหมด?")) {
-                  setRecords([]);
-                  lsSet(STORAGE_KEY, []);
-                  toast$("ล้างข้อมูลแล้ว");
+                if (window.confirm("ยืนยันลบข้อมูลทั้งหมด? (ไม่สามารถกู้คืนได้)")) {
+                  setRecords([]); lsSet(STORAGE_KEY,[]); toast$("ล้างข้อมูลแล้ว");
                 }
               }} style={{ width:"100%",padding:15,borderRadius:12,border:"2px solid #ef4444",background:"white",color:"#ef4444",fontSize:19,fontWeight:700,fontFamily:"Sarabun,sans-serif",cursor:"pointer" }}>
                 🗑️ ลบข้อมูลทั้งหมด
