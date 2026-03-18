@@ -1,0 +1,62 @@
+# 🔐 วิธีตั้งรหัสผ่านที่ Vercel Server (v1.4.0)
+
+## ทำไมต้องเก็บรหัสที่ Server?
+- รหัสใน App.js = ใครก็เปิดดูได้ใน browser DevTools
+- รหัสใน Vercel Environment Variables = เก็บที่ server เท่านั้น ไม่มีใน client code
+- ปลอดภัย 100%
+
+---
+
+## ขั้นตอนตั้งค่า Environment Variables ที่ Vercel
+
+1. ไปที่ vercel.com → เปิดโปรเจกต์ bp-tracker
+2. คลิก Settings → Environment Variables
+3. เพิ่มตัวแปรทีละตัว:
+
+   | Name         | Value (ตัวอย่าง)  | Environment     |
+   |--------------|------------------|-----------------|
+   | UNLOCK_CODE  | MySecret2024     | Production      |
+   | ADMIN_PASS   | AdminPass999     | Production      |
+
+4. กด Save แต่ละตัว
+5. ไปที่ Deployments → Redeploy เพื่อให้ค่าใหม่มีผล
+
+---
+
+## วิธีวางไฟล์
+
+### ไฟล์ที่ต้องวาง:
+
+```
+d:\bp-tracker\
+├── api\
+│   └── verify.js    ← ไฟล์ใหม่! วางในโฟลเดอร์ api ที่ root
+└── src\
+    └── App.js       ← อัปเดต v1.4.0
+```
+
+### คำสั่ง Push:
+```
+cd d:\bp-tracker
+git add .
+git commit -m "v1.4.0: server-side password, backup test"
+git push origin main
+```
+
+---
+
+## ทดสอบ Backup
+
+ในแอป → ตั้งค่า → กด "🔍 ทดสอบระบบ Backup"
+จะแสดงผล:
+- ✅ Backup เครื่อง: ใช้ได้
+- ✅ Google Sheets: ใช้ได้
+
+ถ้า Google Sheets ไม่ผ่าน → ต้อง Deploy Apps Script ใหม่ตามขั้นตอนเดิม
+
+---
+
+## หมายเหตุ
+- ถ้าต้องการเปลี่ยนรหัส → แก้ที่ Vercel Environment Variables เท่านั้น
+- ไม่ต้องแก้โค้ดและ push ใหม่
+- มีผลทันทีหลัง Redeploy
