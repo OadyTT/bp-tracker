@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 
 // ═══════════════════════════════════════════════
-const APP_VERSION  = "v1.5.0";
+const APP_VERSION  = "v1.5.1";
 const BUILD_DATE   = "18 มี.ค. 2568";
 const TRIAL_DAYS   = 60;
 const ADMIN_EMAIL  = "thitiphankk@gmail.com";
@@ -418,7 +418,7 @@ export default function App() {
     toast$(`เครื่อง: ${devOk?"✅":"❌"}  ·  Google Sheets: ${sheetOk?"✅":"❌"}`, devOk&&sheetOk?"ok":"warn", 5000);
   };
 
-  // ── PRINT / PDF ── (เปิด popup แล้วพิมพ์)
+  // ── PRINT / PDF ── (Blob URL — ใช้งานได้บนมือถือทุกรุ่น)
   const doPrint = () => {
     if(!records.length){toast$("ยังไม่มีข้อมูล","warn");return;}
     const rows = records.map(r=>{
@@ -426,69 +426,93 @@ export default function App() {
       const es=bpStatus(r.eveningSys,r.eveningDia);
       const w=rank(ms)>=rank(es)?(ms||es):(es||ms);
       return `<tr>
-        <td>${toThai(r.date)}</td>
-        <td style="color:#92400e">${r.morningTime||"–"}</td>
+        <td style="text-align:left">${toThai(r.date)}</td>
+        <td style="color:#92400e;font-size:10px">${r.morningTime||"–"}</td>
         <td style="font-weight:700;color:${ms?ms.fg:"#000"}">${r.morningSys||"–"}</td>
         <td>${r.morningDia||"–"}</td>
-        <td>${r.morningPulse||"–"}</td>
-        <td style="color:#1d4ed8">${r.eveningTime||"–"}</td>
+        <td style="font-size:10px">${r.morningPulse||"–"}</td>
+        <td style="color:#1d4ed8;font-size:10px">${r.eveningTime||"–"}</td>
         <td style="font-weight:700;color:${es?es.fg:"#000"}">${r.eveningSys||"–"}</td>
         <td>${r.eveningDia||"–"}</td>
-        <td>${r.eveningPulse||"–"}</td>
-        <td style="background:${w?w.bg:"#fff"};color:${w?w.fg:"#000"};font-weight:700">${w?w.label:""}</td>
+        <td style="font-size:10px">${r.eveningPulse||"–"}</td>
+        <td style="background:${w?w.bg:"#fff"};color:${w?w.fg:"#000"};font-weight:700;font-size:10px">${w?w.label:""}</td>
       </tr>`;
     }).join("");
-    const html=`<!DOCTYPE html><html><head>
-      <meta charset="utf-8"/>
-      <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700;800&display=swap" rel="stylesheet"/>
-      <style>
-        *{font-family:'Sarabun',sans-serif;box-sizing:border-box;}
-        body{margin:0;padding:15mm;background:white;}
-        @page{size:A4 portrait;margin:15mm;}
-        h2{text-align:center;color:#0369a1;margin-bottom:4px;font-size:18px;}
-        .info{text-align:center;color:#64748b;font-size:13px;margin-bottom:12px;}
-        table{width:100%;border-collapse:collapse;font-size:11px;page-break-inside:auto;}
-        tr{page-break-inside:avoid;}
-        th,td{border:1px solid #cbd5e1;padding:5px 6px;text-align:center;}
-        th{background:#0284c7;color:white;font-weight:700;}
-        tr:nth-child(even){background:#f8fafc;}
-        .legend{margin-top:10px;display:flex;gap:16px;font-size:11px;}
-        .dot{width:10px;height:10px;border-radius:2px;display:inline-block;margin-right:4px;}
-        .footer{text-align:right;font-size:10px;color:#94a3b8;margin-top:8px;}
-      </style>
-    </head><body>
-      <h2>📋 รายงานความดันโลหิต</h2>
-      <div class="info">
-        ${patient.name?`👤 ${patient.name}`:""} ${patient.phone?`· 📞 ${patient.phone}`:""}
-        <br/>พิมพ์วันที่ ${toThai(todayISO())} · ${records.length} รายการ
-      </div>
-      <table>
-        <thead>
-          <tr>
-            <th rowspan="2">วันที่</th>
-            <th colspan="4" style="background:#b45309">ช่วงเช้า</th>
-            <th colspan="4" style="background:#0369a1">ช่วงเย็น/กลางคืน</th>
-            <th rowspan="2">สถานะ</th>
-          </tr>
-          <tr>
-            <th style="background:#92400e">เวลา</th><th style="background:#92400e">ตัวบน</th><th style="background:#92400e">ตัวล่าง</th><th style="background:#92400e">ชีพจร</th>
-            <th style="background:#1d4ed8">เวลา</th><th style="background:#1d4ed8">ตัวบน</th><th style="background:#1d4ed8">ตัวล่าง</th><th style="background:#1d4ed8">ชีพจร</th>
-          </tr>
-        </thead>
-        <tbody>${rows}</tbody>
-      </table>
-      <div class="legend">
-        <span><span class="dot" style="background:#dcfce7;border:1px solid #166534"></span><span style="color:#166534">ปกติ &lt;120/80</span></span>
-        <span><span class="dot" style="background:#fef9c3;border:1px solid #854d0e"></span><span style="color:#854d0e">สูงเล็กน้อย 120-129</span></span>
-        <span><span class="dot" style="background:#ffedd5;border:1px solid #9a3412"></span><span style="color:#9a3412">สูงระดับ 1 130-139</span></span>
-        <span><span class="dot" style="background:#fee2e2;border:1px solid #991b1b"></span><span style="color:#991b1b">สูงระดับ 2 ≥140</span></span>
-      </div>
-      <div class="footer">Home BP Tracker ${APP_VERSION} · ค่าปกติ &lt;120/80 mmHg</div>
-      <script>window.onload=()=>{window.print();}</script>
-    </body></html>`;
-    const win=window.open("","_blank");
-    if(!win){toast$("กรุณาอนุญาต Popup แล้วลองใหม่","warn");return;}
-    win.document.write(html); win.document.close();
+
+    const html = `<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>รายงานความดันโลหิต — ${patient.name||""}</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700;800&display=swap');
+    *{font-family:'Sarabun',sans-serif;box-sizing:border-box;margin:0;padding:0;}
+    body{background:white;padding:12mm 15mm;}
+    @page{size:A4 portrait;margin:12mm 15mm;}
+    h2{text-align:center;color:#0369a1;margin-bottom:4px;font-size:18pt;}
+    .sub{text-align:center;color:#475569;font-size:11pt;margin-bottom:3px;}
+    .meta{text-align:center;color:#94a3b8;font-size:9pt;margin-bottom:12px;}
+    table{width:100%;border-collapse:collapse;font-size:10pt;page-break-inside:auto;}
+    tr{page-break-inside:avoid;page-break-after:auto;}
+    thead{display:table-header-group;}
+    th,td{border:1px solid #94a3b8;padding:5px 5px;text-align:center;vertical-align:middle;}
+    th{background:#0284c7;color:white;font-weight:700;font-size:9pt;}
+    tr:nth-child(even) td{background:#f8fafc;}
+    .legend{margin-top:10px;display:flex;gap:14px;flex-wrap:wrap;font-size:9pt;}
+    .dot{width:10px;height:10px;border-radius:2px;display:inline-block;margin-right:3px;vertical-align:middle;}
+    .footer{text-align:right;font-size:8pt;color:#94a3b8;margin-top:8px;border-top:1px solid #e2e8f0;padding-top:6px;}
+    .print-btn{display:block;margin:0 auto 16px;padding:12px 32px;background:#0284c7;color:white;border:none;border-radius:10px;font-size:16pt;font-family:'Sarabun',sans-serif;font-weight:700;cursor:pointer;}
+    @media print{.print-btn{display:none!important;}}
+  </style>
+</head>
+<body>
+  <button class="print-btn" onclick="window.print()">🖨️ พิมพ์ / บันทึกเป็น PDF</button>
+  <h2>📋 รายงานความดันโลหิต</h2>
+  ${patient.name?`<div class="sub">👤 ${patient.name}${patient.phone?` &nbsp;·&nbsp; 📞 ${patient.phone}`:""}</div>`:""}
+  <div class="meta">พิมพ์วันที่ ${toThai(todayISO())} &nbsp;·&nbsp; ${records.length} รายการ &nbsp;·&nbsp; Home BP Tracker ${APP_VERSION}</div>
+  <table>
+    <thead>
+      <tr>
+        <th rowspan="2" style="background:#374151">วันที่</th>
+        <th colspan="4" style="background:#92400e">🌅 ช่วงเช้า</th>
+        <th colspan="4" style="background:#1d4ed8">🌙 ช่วงเย็น/กลางคืน</th>
+        <th rowspan="2" style="background:#374151">สถานะ</th>
+      </tr>
+      <tr>
+        <th style="background:#b45309;font-size:8pt">เวลา</th>
+        <th style="background:#b45309">ตัวบน</th>
+        <th style="background:#b45309">ตัวล่าง</th>
+        <th style="background:#b45309;font-size:8pt">ชีพจร</th>
+        <th style="background:#2563eb;font-size:8pt">เวลา</th>
+        <th style="background:#2563eb">ตัวบน</th>
+        <th style="background:#2563eb">ตัวล่าง</th>
+        <th style="background:#2563eb;font-size:8pt">ชีพจร</th>
+      </tr>
+    </thead>
+    <tbody>${rows}</tbody>
+  </table>
+  <div class="legend">
+    <span><span class="dot" style="background:#dcfce7;border:1px solid #166534"></span><span style="color:#166534;font-weight:700">ปกติ</span> &lt;120/80</span>
+    <span><span class="dot" style="background:#fef9c3;border:1px solid #854d0e"></span><span style="color:#854d0e;font-weight:700">สูงเล็กน้อย</span> 120–129</span>
+    <span><span class="dot" style="background:#ffedd5;border:1px solid #9a3412"></span><span style="color:#9a3412;font-weight:700">สูงระดับ 1</span> 130–139</span>
+    <span><span class="dot" style="background:#fee2e2;border:1px solid #991b1b"></span><span style="color:#991b1b;font-weight:700">สูงระดับ 2</span> ≥140 mmHg</span>
+  </div>
+  <div class="footer">ค่าปกติ: ความดันตัวบน &lt;120 / ตัวล่าง &lt;80 mmHg &nbsp;·&nbsp; ชีพจร 60–100 ครั้ง/นาที &nbsp;·&nbsp; อ้างอิง: WHO, AHA 2023</div>
+</body>
+</html>`;
+
+    // สร้าง Blob URL — ใช้งานได้บนมือถือทุกรุ่น ไม่โดน block
+    const blob = new Blob([html], {type:"text/html;charset=utf-8"});
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.target   = "_blank";
+    a.rel      = "noopener";
+    a.click();
+    // clean up หลัง 60 วินาที
+    setTimeout(()=>URL.revokeObjectURL(url), 60000);
+    toast$("เปิดหน้ารายงานแล้ว — กดปุ่ม 🖨️ เพื่อพิมพ์","ok",4000);
   };
 
   // ── SAVE JPG ──
@@ -847,7 +871,7 @@ export default function App() {
               {capturing?"⏳ กำลังสร้างรูปภาพ...":"📸 บันทึกเป็นรูปภาพ (JPG)"}
             </button>
             <button onClick={doPrint} style={{...S.btnGhost,width:"100%",display:"block",background:"#f0f9ff",border:"2px solid #0284c7"}}>
-              🖨️ พิมพ์ / PDF (A4) — เปิดหน้าต่างใหม่พร้อมพิมพ์
+              🖨️ เปิดหน้ารายงาน A4 (พิมพ์ / PDF)
             </button>
           </div>
           <div ref={reportRef} style={{margin:"0 14px 14px",background:"white",borderRadius:18,padding:20,boxShadow:"0 2px 8px rgba(0,0,0,0.07)"}}>
