@@ -1,20 +1,23 @@
 import { useState, useEffect, useRef } from "react";
 
 // ═══════════════════════════════════════════════
-const APP_VERSION = "v1.4.0";
-const BUILD_DATE  = "18 มี.ค. 2568";
-const TRIAL_DAYS  = 60;
+const APP_VERSION  = "v1.5.0";
+const BUILD_DATE   = "18 มี.ค. 2568";
+const TRIAL_DAYS   = 60;
+const ADMIN_EMAIL  = "thitiphankk@gmail.com";
+const ADMIN_LINE   = "Oady";
 const KEY_RECORDS  = "bp-records-v1";
 const KEY_PATIENT  = "bp-patient-v1";
 const KEY_INSTALL  = "bp-install-date";
 const KEY_UNLOCKED = "bp-unlocked";
 const KEY_ADMIN    = "bp-admin-cfg";
-const KEY_ONBOARD  = "bp-onboarded";
+const KEY_BACKUP_TS= "bp-last-backup";
 const SCRIPT_URL   = "https://script.google.com/macros/s/AKfycbxN0gf9mWMF9I4fCazGo4WhyWONrStPMiwuM-Xnc6GZSRk7iXf1V6E_HR5NPPkWB2eZ9w/exec";
 // ═══════════════════════════════════════════════
 
 const todayISO = () => new Date().toISOString().split("T")[0];
-const toThai = (iso) => {
+const nowStr   = () => new Date().toLocaleString("th-TH",{dateStyle:"short",timeStyle:"short"});
+const toThai   = (iso) => {
   if (!iso) return "";
   const [y,m,d] = iso.split("-");
   const M=["","ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
@@ -22,63 +25,74 @@ const toThai = (iso) => {
 };
 const lsGet = (k,fb) => { try{const v=localStorage.getItem(k);return v?JSON.parse(v):fb;}catch{return fb;} };
 const lsSet = (k,v)  => { try{localStorage.setItem(k,JSON.stringify(v));}catch{} };
+const lsRaw = (k)    => { try{return localStorage.getItem(k)||"";}catch{return "";} };
 
 const BP_LEVELS = ["ปกติ","สูงเล็กน้อย","สูงระดับ 1","สูงระดับ 2"];
-const bpStatus = (sys,dia) => {
+const bpStatus  = (sys,dia) => {
   const s=parseInt(sys),d=parseInt(dia);
   if(!s||!d) return null;
   if(s<120&&d<80) return {label:"ปกติ",        bg:"#dcfce7",fg:"#166534",bar:"#22c55e"};
   if(s<130&&d<80) return {label:"สูงเล็กน้อย", bg:"#fef9c3",fg:"#854d0e",bar:"#eab308"};
   if(s<140||d<90) return {label:"สูงระดับ 1",  bg:"#ffedd5",fg:"#9a3412",bar:"#f97316"};
-  return              {label:"สูงระดับ 2",  bg:"#fee2e2",fg:"#991b1b",bar:"#ef4444"};
+  return                 {label:"สูงระดับ 2",  bg:"#fee2e2",fg:"#991b1b",bar:"#ef4444"};
 };
 const rank = st => st ? BP_LEVELS.indexOf(st.label) : -1;
 
-// ── Server-side password verify (รหัสอยู่ที่ Vercel server ไม่ใช่ client) ──
+// ── Server verify (Vercel API) ──────────────────
 const verifyCode = async (type, code) => {
   try {
     const res = await fetch("/api/verify", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type, code }),
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({type, code}),
     });
     const data = await res.json();
     return data.ok === true;
-  } catch {
-    // fallback: ถ้า API ใช้งานไม่ได้ (local dev) ให้ผ่านชั่วคราว
-    console.warn("⚠️ /api/verify ไม่ตอบสนอง (local dev mode)");
-    return false;
-  }
+  } catch { return false; }
 };
 
-// ── Google Sheets sync ──────────────────────────
+// ── Notify admin via Google Apps Script ─────────
+const notifyAdmin = async (patientName, phone) => {
+  try {
+    const fd = new FormData();
+    fd.append("data", JSON.stringify({
+      type:"payment_request",
+      patientName, phone,
+      adminEmail: ADMIN_EMAIL,
+      adminLine: ADMIN_LINE,
+      timestamp: new Date().toISOString(),
+    }));
+    await fetch(SCRIPT_URL, {method:"POST", mode:"no-cors", body:fd});
+  } catch {}
+};
+
+// ── Sync one record ─────────────────────────────
 const syncToSheet = async (entry, patientName) => {
   try {
     const fd = new FormData();
     fd.append("data", JSON.stringify({...entry, patientName}));
     await fetch(SCRIPT_URL, {method:"POST", mode:"no-cors", body:fd});
     return {ok:true};
-  } catch(e) { return {ok:false, err:e.message}; }
+  } catch(e) { return {ok:false}; }
 };
 
-// ── Sync ALL records to sheet (backup) ──────────
+// ── Sync ALL records ────────────────────────────
 const syncAllToSheet = async (records, patientName, onProgress) => {
   let ok=0, fail=0;
-  for (let i=0; i<records.length; i++) {
+  for(let i=0;i<records.length;i++){
     onProgress && onProgress(i+1, records.length);
     const r = await syncToSheet(records[i], patientName);
     if(r.ok) ok++; else fail++;
-    await new Promise(res=>setTimeout(res,300));
+    await new Promise(res=>setTimeout(res,350));
   }
   return {ok, fail};
 };
 
-// ── Input ──────────────────────────────────────
+// ── Input ───────────────────────────────────────
 const Input = ({label,value,onChange,type="text",placeholder,unit,readOnly}) => (
   <div style={{display:"flex",flexDirection:"column",gap:6}}>
     <label style={{fontSize:17,fontWeight:700,color:"#334155"}}>{label}</label>
     <div style={{position:"relative",display:"flex",alignItems:"center"}}>
-      <input type={type} value={value} readOnly={readOnly}
+      <input type={type} value={value||""} readOnly={readOnly}
         onChange={e=>onChange&&onChange(e.target.value)} placeholder={placeholder}
         style={{width:"100%",padding:"15px 16px",borderRadius:12,border:"2px solid #cbd5e1",
           fontSize:21,background:readOnly?"#f1f5f9":"#f8fafc",outline:"none",
@@ -91,14 +105,15 @@ const Input = ({label,value,onChange,type="text",placeholder,unit,readOnly}) => 
   </div>
 );
 
-// ── SVG Graph ──────────────────────────────────
+// ── SVG Graph ───────────────────────────────────
 const BPGraph = ({records}) => {
-  const last14 = records.slice(-14);
-  if(last14.length<2) return <div style={{textAlign:"center",padding:"20px 0",color:"#94a3b8",fontSize:15}}>ต้องมีข้อมูลอย่างน้อย 2 วัน</div>;
+  const last14=records.slice(-14);
+  if(last14.length<2) return <div style={{textAlign:"center",padding:"20px",color:"#94a3b8",fontSize:15}}>ต้องมีข้อมูลอย่างน้อย 2 วัน</div>;
   const W=320,H=160,PL=36,PR=10,PT=10,PB=30,gW=W-PL-PR,gH=H-PT-PB;
   const sysV=last14.map(r=>r.morningSys?+r.morningSys:(r.eveningSys?+r.eveningSys:null));
   const diaV=last14.map(r=>r.morningDia?+r.morningDia:(r.eveningDia?+r.eveningDia:null));
   const all=[...sysV,...diaV].filter(Boolean);
+  if(!all.length) return null;
   const minV=Math.max(50,Math.min(...all)-10), maxV=Math.min(200,Math.max(...all)+10);
   const xP=i=>PL+(i/(last14.length-1))*gW;
   const yP=v=>PT+(1-(v-minV)/(maxV-minV))*gH;
@@ -117,7 +132,7 @@ const BPGraph = ({records}) => {
         {[minV,Math.round((minV+maxV)/2),maxV].map(v=>(
           <text key={v} x={PL-4} y={yP(v)+4} fontSize="9" fill="#94a3b8" textAnchor="end">{v}</text>
         ))}
-        {last14.map((r,i)=>i%3===0&&<text key={i} x={xP(i)} y={H-4} fontSize="8" fill="#94a3b8" textAnchor="middle">{r.date.slice(8)}</text>)}
+        {last14.map((_,i)=>i%3===0&&<text key={i} x={xP(i)} y={H-4} fontSize="8" fill="#94a3b8" textAnchor="middle">{last14[i].date.slice(8)}</text>)}
         <path d={path(sysV)} fill="none" stroke="#ef4444" strokeWidth="2" strokeLinejoin="round"/>
         <path d={path(diaV)} fill="none" stroke="#3b82f6" strokeWidth="2" strokeLinejoin="round"/>
         {sysV.map((v,i)=>v&&<circle key={i} cx={xP(i)} cy={yP(v)} r="3" fill="#ef4444"/>)}
@@ -131,8 +146,8 @@ const BPGraph = ({records}) => {
   );
 };
 
-// ── Recommendation ─────────────────────────────
-const getRec = (records) => {
+// ── Health Recommendation ───────────────────────
+const getRec = records => {
   const last7=records.slice(-7);
   if(!last7.length) return null;
   const vals=last7.flatMap(r=>[r.morningSys?{s:+r.morningSys,d:+r.morningDia}:null,r.eveningSys?{s:+r.eveningSys,d:+r.eveningDia}:null]).filter(Boolean);
@@ -140,51 +155,108 @@ const getRec = (records) => {
   const avgS=Math.round(vals.reduce((a,v)=>a+v.s,0)/vals.length);
   const avgD=Math.round(vals.reduce((a,v)=>a+v.d,0)/vals.length);
   const st=bpStatus(avgS,avgD);
-  const tips={"ปกติ":["✅ ความดันอยู่ในเกณฑ์ดี ดูแลต่อไป","🥗 รับประทานผักผลไม้ให้ครบ 5 หมู่","🏃 ออกกำลังกาย 30 นาที/วัน"],
-    "สูงเล็กน้อย":["⚠️ ลดเกลือและโซเดียมในอาหาร","🚶 เดินออกกำลังกาย 30–45 นาที/วัน","😴 นอนหลับ 7–8 ชั่วโมง"],
-    "สูงระดับ 1":["🏥 ควรพบแพทย์เพื่อประเมินการรักษา","🚫 งดอาหารเค็มและแอลกอฮอล์","💊 หากแพทย์สั่งยา รับประทานสม่ำเสมอ"],
-    "สูงระดับ 2":["🚨 ความดันสูงมาก ควรพบแพทย์โดยด่วน","🚫 ห้ามออกกำลังกายหนักโดยยังไม่ผ่านแพทย์","📞 ปวดศีรษะรุนแรง เจ็บหน้าอก รีบไป ER ทันที"]};
+  const tips={"ปกติ":["✅ ความดันอยู่ในเกณฑ์ดี ดูแลต่อไป","🥗 รับประทานผักผลไม้ครบ 5 หมู่","🏃 ออกกำลังกาย 30 นาที/วัน"],"สูงเล็กน้อย":["⚠️ ลดเกลือและโซเดียมในอาหาร","🚶 เดิน 30–45 นาที/วัน","😴 นอนหลับ 7–8 ชั่วโมง"],"สูงระดับ 1":["🏥 ควรพบแพทย์เพื่อประเมินการรักษา","🚫 งดอาหารเค็มและแอลกอฮอล์","💊 รับประทานยาตามแพทย์สั่งสม่ำเสมอ"],"สูงระดับ 2":["🚨 ความดันสูงมาก ควรพบแพทย์โดยด่วน","🚫 ห้ามออกกำลังหนักโดยยังไม่ผ่านแพทย์","📞 ปวดศีรษะรุนแรง เจ็บหน้าอก รีบไป ER ทันที"]};
   return {avgS,avgD,status:st,tips:(st?tips[st.label]:[])||[]};
 };
 
-// ── Paywall ────────────────────────────────────
-const Paywall = ({adminCfg, onUnlock}) => {
+// ═══════════════════════════════════════════════
+//  PAYWALL COMPONENT
+// ═══════════════════════════════════════════════
+const Paywall = ({adminCfg, onUnlock, onBack}) => {
   const [code,    setCode]    = useState("");
   const [err,     setErr]     = useState(false);
   const [loading, setLoading] = useState(false);
+  const [notified,setNotified]= useState(false);
+  const [nLoading,setNLoading]= useState(false);
+  const [phone,   setPhone]   = useState("");
 
   const tryUnlock = async () => {
-    if (!code.trim()) return;
+    if(!code.trim()) return;
     setLoading(true);
     const valid = await verifyCode("unlock", code.trim());
     setLoading(false);
-    if (valid) { onUnlock(); }
-    else { setErr(true); setTimeout(() => setErr(false), 2500); }
+    if(valid){ onUnlock(); }
+    else { setErr(true); setTimeout(()=>setErr(false),2500); }
   };
+
+  const doNotify = async () => {
+    setNLoading(true);
+    await notifyAdmin(adminCfg.patientName||"ไม่ระบุ", phone);
+    setNLoading(false);
+    setNotified(true);
+  };
+
+  // คำนวณวันที่ใช้ไปแล้ว
+  const installDate = lsRaw(KEY_INSTALL);
+  const daysUsed = installDate ? Math.floor((Date.now()-new Date(installDate))/(86400000)) : TRIAL_DAYS;
+  const daysLeft = Math.max(0, TRIAL_DAYS - daysUsed);
+
   return (
-    <div style={{position:"fixed",inset:0,background:"rgba(2,132,199,0.97)",zIndex:900,display:"flex",alignItems:"center",justifyContent:"center",padding:20,fontFamily:"Sarabun,sans-serif"}}>
-      <div style={{background:"white",borderRadius:24,padding:28,width:"100%",maxWidth:360,textAlign:"center"}}>
-        <div style={{fontSize:48,marginBottom:8}}>🔒</div>
-        <div style={{fontSize:22,fontWeight:800,color:"#0369a1",marginBottom:6}}>หมดระยะทดลองใช้</div>
-        <div style={{fontSize:16,color:"#64748b",marginBottom:20,lineHeight:1.7}}>ครบ {TRIAL_DAYS} วันแล้ว กรุณาชำระเงินเพื่อใช้งานต่อเนื่อง</div>
-        {adminCfg.qrUrl&&<div style={{marginBottom:16}}><img src={adminCfg.qrUrl} alt="QR" style={{width:180,height:180,borderRadius:12,border:"2px solid #e2e8f0"}} onError={e=>e.target.style.display="none"}/></div>}
-        {(adminCfg.price||adminCfg.bankName)&&(
-          <div style={{background:"#f0f9ff",borderRadius:14,padding:"12px 16px",marginBottom:16,textAlign:"left",fontSize:15,lineHeight:2}}>
-            {adminCfg.price&&<div>💰 ราคา: <strong>{adminCfg.price}</strong></div>}
+    <div style={{position:"fixed",inset:0,background:"rgba(2,132,199,0.97)",zIndex:900,display:"flex",alignItems:"center",justifyContent:"center",padding:16,fontFamily:"Sarabun,sans-serif",overflowY:"auto"}}>
+      <div style={{background:"white",borderRadius:24,padding:24,width:"100%",maxWidth:380,margin:"auto"}}>
+        {/* Back button */}
+        <button onClick={onBack} style={{display:"flex",alignItems:"center",gap:6,background:"none",border:"none",color:"#64748b",fontSize:16,cursor:"pointer",fontFamily:"Sarabun,sans-serif",marginBottom:12,padding:0}}>
+          ← ย้อนกลับ
+        </button>
+        <div style={{textAlign:"center",marginBottom:16}}>
+          <div style={{fontSize:44,marginBottom:6}}>🔒</div>
+          <div style={{fontSize:22,fontWeight:800,color:"#0369a1"}}>หมดระยะทดลองใช้</div>
+          <div style={{fontSize:15,color:"#64748b",marginTop:4,lineHeight:1.7}}>
+            ทดลองใช้ครบ <strong>{TRIAL_DAYS} วัน</strong> แล้ว<br/>
+            ใช้ไปแล้ว {daysUsed} วัน | เหลือ <span style={{color:"#ef4444",fontWeight:800}}>{daysLeft} วัน</span>
+          </div>
+        </div>
+
+        {/* Payment info */}
+        {(adminCfg.price||adminCfg.bankName||adminCfg.qrUrl)&&(
+          <div style={{background:"#f0f9ff",borderRadius:14,padding:"14px 16px",marginBottom:14,textAlign:"left",fontSize:15,lineHeight:2}}>
+            {adminCfg.price&&<div>💰 ราคา Full Version: <strong>{adminCfg.price}</strong></div>}
             {adminCfg.bankName&&<div>🏦 ธนาคาร: <strong>{adminCfg.bankName}</strong></div>}
             {adminCfg.accountNo&&<div>📋 เลขบัญชี: <strong>{adminCfg.accountNo}</strong></div>}
             {adminCfg.accountName&&<div>👤 ชื่อบัญชี: <strong>{adminCfg.accountName}</strong></div>}
+            {adminCfg.phone&&<div>📞 ติดต่อซื้อ: <strong>{adminCfg.phone}</strong></div>}
           </div>
         )}
-        <div style={{fontSize:15,color:"#475569",marginBottom:10}}>รับรหัสปลดล็อคหลังชำระเงิน</div>
+
+        {adminCfg.qrUrl&&(
+          <div style={{textAlign:"center",marginBottom:14}}>
+            <div style={{fontSize:15,fontWeight:700,color:"#475569",marginBottom:8}}>สแกน QR โอนเงิน</div>
+            <img src={adminCfg.qrUrl} alt="QR" style={{width:200,height:200,borderRadius:12,border:"2px solid #e2e8f0"}} onError={e=>e.target.style.display="none"}/>
+          </div>
+        )}
+
+        {/* Notify admin */}
+        {!notified?(
+          <div style={{background:"#fefce8",borderRadius:12,padding:14,marginBottom:14}}>
+            <div style={{fontSize:15,fontWeight:700,color:"#92400e",marginBottom:8}}>📲 แจ้งชำระเงิน เพื่อรับรหัสปลดล็อค</div>
+            <div style={{fontSize:14,color:"#78350f",marginBottom:10}}>
+              ระบบจะแจ้งเจ้าหน้าที่ทาง Email & Line
+            </div>
+            <input value={phone} onChange={e=>setPhone(e.target.value)} placeholder="เบอร์มือถือของคุณ"
+              style={{width:"100%",padding:"12px",borderRadius:10,border:"1.5px solid #fde68a",fontSize:18,fontFamily:"Sarabun,sans-serif",boxSizing:"border-box",marginBottom:10,outline:"none"}}/>
+            <button onClick={doNotify} disabled={nLoading||!phone}
+              style={{width:"100%",padding:"13px",background:nLoading?"#94a3b8":"linear-gradient(135deg,#f59e0b,#d97706)",color:"white",border:"none",borderRadius:10,fontSize:17,fontWeight:800,fontFamily:"Sarabun,sans-serif",cursor:"pointer"}}>
+              {nLoading?"⏳ กำลังส่ง...":"📲 แจ้งชำระเงิน"}
+            </button>
+          </div>
+        ):(
+          <div style={{background:"#dcfce7",borderRadius:12,padding:14,marginBottom:14,textAlign:"center"}}>
+            <div style={{fontSize:20,marginBottom:4}}>✅</div>
+            <div style={{fontSize:15,fontWeight:700,color:"#166534"}}>ส่งแจ้งเจ้าหน้าที่แล้ว</div>
+            <div style={{fontSize:14,color:"#15803d"}}>รอรับรหัสปลดล็อคทาง Line: {ADMIN_LINE}</div>
+          </div>
+        )}
+
+        {/* Unlock code */}
+        <div style={{fontSize:15,color:"#475569",marginBottom:8,textAlign:"center"}}>ใส่รหัสปลดล็อคที่ได้รับ</div>
         <input value={code} onChange={e=>setCode(e.target.value)}
           onKeyDown={e=>e.key==="Enter"&&tryUnlock()}
-          placeholder="ใส่รหัสปลดล็อค"
-          style={{width:"100%",padding:"14px",borderRadius:12,border:`2px solid ${err?"#ef4444":"#cbd5e1"}`,fontSize:18,fontFamily:"Sarabun,sans-serif",boxSizing:"border-box",textAlign:"center",fontWeight:700,outline:"none",marginBottom:12}}/>
-        {err&&<div style={{color:"#ef4444",fontSize:15,marginBottom:8}}>❌ รหัสไม่ถูกต้อง ลองใหม่</div>}
+          placeholder="รหัสปลดล็อค"
+          style={{width:"100%",padding:"14px",borderRadius:12,border:`2px solid ${err?"#ef4444":"#cbd5e1"}`,fontSize:18,fontFamily:"Sarabun,sans-serif",boxSizing:"border-box",textAlign:"center",fontWeight:700,outline:"none",marginBottom:err?6:12}}/>
+        {err&&<div style={{color:"#ef4444",fontSize:15,marginBottom:8,textAlign:"center"}}>❌ รหัสไม่ถูกต้อง ลองใหม่อีกครั้ง</div>}
         <button onClick={tryUnlock} disabled={loading}
           style={{width:"100%",padding:"16px",background:loading?"#94a3b8":"linear-gradient(135deg,#0284c7,#075985)",color:"white",border:"none",borderRadius:12,fontSize:20,fontWeight:800,fontFamily:"Sarabun,sans-serif",cursor:"pointer"}}>
-          {loading ? "⏳ กำลังตรวจสอบ..." : "🔓 ปลดล็อค Full Version"}
+          {loading?"⏳ กำลังตรวจสอบ...":"🔓 ปลดล็อค Full Version"}
         </button>
       </div>
     </div>
@@ -203,175 +275,235 @@ export default function App() {
   const [saving,        setSaving]        = useState(false);
   const [capturing,     setCapturing]     = useState(false);
   const [syncing,       setSyncing]       = useState(false);
-  const [syncProgress,  setSyncProgress]  = useState(null);
+  const [syncProg,      setSyncProg]      = useState(null);
+  const [lastBackup,    setLastBackup]    = useState("");
+  const [lastSheetSync, setLastSheetSync] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [showDeleteZone,setShowDeleteZone]= useState(false);
+  const [editRecord,    setEditRecord]    = useState(null);
   const [trialLeft,     setTrialLeft]     = useState(TRIAL_DAYS);
+  const [daysUsed,      setDaysUsed]      = useState(0);
   const [isUnlocked,    setIsUnlocked]    = useState(false);
   const [showPaywall,   setShowPaywall]   = useState(false);
-  const [adminCfg,      setAdminCfg]      = useState({unlockCode:"BP2024FREE",qrUrl:"",bankName:"",accountNo:"",accountName:"",price:"",adminPass:"admin1234"});
+  const [adminCfg,      setAdminCfg]      = useState({unlockCode:"",qrUrl:"",bankName:"",accountNo:"",accountName:"",price:"",phone:"",adminPass:""});
   const [adminTap,      setAdminTap]      = useState(0);
   const [showAdmin,     setShowAdmin]     = useState(false);
   const [adminAuth,     setAdminAuth]     = useState(false);
   const [adminPass,     setAdminPass]     = useState("");
   const [adminLoading,  setAdminLoading]  = useState(false);
   const [showGuide,     setShowGuide]     = useState(false);
+  const [testResult,    setTestResult]    = useState(null);
   const reportRef = useRef(null);
-  const printFrameRef = useRef(null);
 
-  const [form,setForm]=useState({date:todayISO(),morningTime:"",morningSys:"",morningDia:"",morningPulse:"",eveningTime:"",eveningSys:"",eveningDia:"",eveningPulse:""});
+  const emptyForm = {date:todayISO(),morningTime:"",morningSys:"",morningDia:"",morningPulse:"",eveningTime:"",eveningSys:"",eveningDia:"",eveningPulse:""};
+  const [form, setForm] = useState(emptyForm);
 
   // ── INIT ──
   useEffect(()=>{
     setRecords(lsGet(KEY_RECORDS,[]));
     setPatient(lsGet(KEY_PATIENT,{name:"",phone:""}));
-    setAdminCfg(lsGet(KEY_ADMIN,{unlockCode:"BP2024FREE",qrUrl:"",bankName:"",accountNo:"",accountName:"",price:"",adminPass:"admin1234"}));
-    const unlocked=lsGet(KEY_UNLOCKED,false);
+    setAdminCfg(lsGet(KEY_ADMIN,{unlockCode:"",qrUrl:"",bankName:"",accountNo:"",accountName:"",price:"",phone:"",adminPass:""}));
+    setLastBackup(lsRaw(KEY_BACKUP_TS));
+    setLastSheetSync(lsRaw("bp-sheet-sync-ts")||"");
+    const unlocked = lsGet(KEY_UNLOCKED,false);
     setIsUnlocked(unlocked);
     if(!unlocked){
-      let inst=localStorage.getItem(KEY_INSTALL);
-      if(!inst){inst=new Date().toISOString();localStorage.setItem(KEY_INSTALL,inst);}
-      const days=Math.floor((Date.now()-new Date(inst))/(86400000));
-      const left=Math.max(0,TRIAL_DAYS-days);
-      setTrialLeft(left);
-      if(left===0)setShowPaywall(true);
+      let inst = localStorage.getItem(KEY_INSTALL);
+      if(!inst){ inst=new Date().toISOString(); localStorage.setItem(KEY_INSTALL,inst); }
+      const used = Math.floor((Date.now()-new Date(inst))/(86400000));
+      const left = Math.max(0, TRIAL_DAYS-used);
+      setDaysUsed(used); setTrialLeft(left);
+      if(left===0) setShowPaywall(true);
     }
-    if(!window._h2cLoaded){window._h2cLoaded=true;const sc=document.createElement("script");sc.src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";document.head.appendChild(sc);}
+    if(!window._h2cLoaded){
+      window._h2cLoaded=true;
+      const sc=document.createElement("script");
+      sc.src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
+      document.head.appendChild(sc);
+    }
     setLoaded(true);
   },[]);
 
-  const toast$ = (msg,type="ok",dur=3200) => {setToast({msg,type});setTimeout(()=>setToast(null),dur);};
+  const toast$ = (msg,type="ok",dur=3500)=>{setToast({msg,type});setTimeout(()=>setToast(null),dur);};
   const doUnlock = ()=>{lsSet(KEY_UNLOCKED,true);setIsUnlocked(true);setShowPaywall(false);toast$("🎉 ปลดล็อคสำเร็จ! ยินดีต้อนรับสู่ Full Version");};
 
-  // เมื่อเปลี่ยนวันที่ → โหลดข้อมูลเดิมขึ้นมาถ้ามี
+  // ── CHANGE DATE (auto-load existing) ──
   const changeDate = (newDate) => {
-    const existing = records.find(r => r.date === newDate);
-    if (existing) {
-      setForm({...existing});
-      toast$(`📋 โหลดข้อมูลวันที่ ${toThai(newDate)} แล้ว — แก้ไขได้เลย`, "ok", 2500);
-    } else {
-      setForm(f => ({
-        date: newDate,
-        morningTime:"", morningSys:"", morningDia:"", morningPulse:"",
-        eveningTime:"", eveningSys:"", eveningDia:"", eveningPulse:"",
-      }));
-    }
+    const ex = records.find(r=>r.date===newDate);
+    if(ex){ setForm({...ex}); toast$(`📋 โหลดข้อมูล ${toThai(newDate)} แล้ว`,"ok",2000); }
+    else   { setForm({...emptyForm, date:newDate}); }
   };
+  const setF = k=>v=>{ if(k==="date"){changeDate(v);return;} setForm(f=>({...f,[k]:v})); };
 
-  const setF = k => v => {
-    if (k === "date") { changeDate(v); return; }
-    setForm(f => ({...f, [k]: v}));
-  };
-
-  // ── SUBMIT ──
-  const submit = async()=>{
+  // ── SUBMIT (save/update) ──
+  const submit = async () => {
     if(!form.morningSys&&!form.morningDia&&!form.eveningSys&&!form.eveningDia){
-      toast$("กรอกค่าความดันอย่างน้อย 1 ช่วง (เช้า หรือ เย็น)","err");return;
+      toast$("กรอกค่าความดันอย่างน้อย 1 ช่วง","err"); return;
     }
     if(!isUnlocked&&trialLeft===0){setShowPaywall(true);return;}
     setSaving(true);
     const idx = records.findIndex(r=>r.date===form.date);
-    // ถ้ามีข้อมูลเดิม → merge เฉพาะช่วงที่กรอกใหม่
-    const existing = idx>=0 ? records[idx] : null;
+    const ex  = idx>=0 ? records[idx] : null;
     const entry = {
-      date: form.date,
-      id:   existing ? existing.id : Date.now(),
-      // ช่วงเช้า: ถ้ากรอกใหม่ให้ใช้ใหม่ ถ้าว่างให้เก็บของเดิม
-      morningTime:  form.morningSys ? form.morningTime  : (existing?.morningTime  || ""),
-      morningSys:   form.morningSys || existing?.morningSys  || "",
-      morningDia:   form.morningSys ? form.morningDia   : (existing?.morningDia   || ""),
-      morningPulse: form.morningSys ? form.morningPulse : (existing?.morningPulse || ""),
-      // ช่วงเย็น: ถ้ากรอกใหม่ให้ใช้ใหม่ ถ้าว่างให้เก็บของเดิม
-      eveningTime:  form.eveningSys ? form.eveningTime  : (existing?.eveningTime  || ""),
-      eveningSys:   form.eveningSys || existing?.eveningSys  || "",
-      eveningDia:   form.eveningSys ? form.eveningDia   : (existing?.eveningDia   || ""),
-      eveningPulse: form.eveningSys ? form.eveningPulse : (existing?.eveningPulse || ""),
+      date: form.date, id: ex?ex.id:Date.now(),
+      morningTime:  form.morningSys?form.morningTime :(ex?.morningTime ||""),
+      morningSys:   form.morningSys||ex?.morningSys  ||"",
+      morningDia:   form.morningSys?form.morningDia  :(ex?.morningDia  ||""),
+      morningPulse: form.morningSys?form.morningPulse:(ex?.morningPulse||""),
+      eveningTime:  form.eveningSys?form.eveningTime :(ex?.eveningTime ||""),
+      eveningSys:   form.eveningSys||ex?.eveningSys  ||"",
+      eveningDia:   form.eveningSys?form.eveningDia  :(ex?.eveningDia  ||""),
+      eveningPulse: form.eveningSys?form.eveningPulse:(ex?.eveningPulse||""),
     };
-    const next = idx>=0
-      ? records.map((r,i)=>i===idx?entry:r)
-      : [...records,entry].sort((a,b)=>a.date.localeCompare(b.date));
+    const next = idx>=0 ? records.map((r,i)=>i===idx?entry:r) : [...records,entry].sort((a,b)=>a.date.localeCompare(b.date));
     setRecords(next); lsSet(KEY_RECORDS,next);
     const res = await syncToSheet(entry, patient.name);
-    const action = existing ? "อัปเดต" : "บันทึก";
-    toast$(res.ok?`✅ ${action} + ซิงค์ Google Sheets สำเร็จ`:`💾 ${action}ในเครื่องแล้ว (Google Sheets ไม่สำเร็จ)`,res.ok?"ok":"warn");
-    setForm({date:todayISO(),morningTime:"",morningSys:"",morningDia:"",morningPulse:"",eveningTime:"",eveningSys:"",eveningDia:"",eveningPulse:""});
-    setSaving(false); setTab("history");
+    if(res.ok){ const ts=nowStr(); localStorage.setItem("bp-sheet-sync-ts",ts); setLastSheetSync(ts); }
+    toast$(res.ok?`✅ ${ex?"อัปเดต":"บันทึก"} + ซิงค์ Google Sheets สำเร็จ`:`💾 ${ex?"อัปเดต":"บันทึก"}ในเครื่องแล้ว (ออฟไลน์)`,res.ok?"ok":"warn");
+    setForm(emptyForm); setSaving(false); setTab("history");
   };
 
-  const delRecord = id=>{const next=records.filter(r=>r.id!==id);setRecords(next);lsSet(KEY_RECORDS,next);setDeleteConfirm(null);toast$("ลบรายการแล้ว");};
+  // ── EDIT from history ──
+  const openEdit = (r) => {
+    setEditRecord(r);
+    setForm({...r});
+    setTab("record");
+  };
+
+  // ── DELETE ──
+  const delRecord = id => {
+    const next=records.filter(r=>r.id!==id);
+    setRecords(next); lsSet(KEY_RECORDS,next);
+    setDeleteConfirm(null); toast$("ลบรายการแล้ว");
+  };
 
   // ── BACKUP to device ──
-  const exportBackup = ()=>{
+  const exportBackup = () => {
     const blob=new Blob([JSON.stringify({version:APP_VERSION,patient,records,exportedAt:new Date().toISOString()},null,2)],{type:"application/json"});
-    const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`bp-backup_${patient.name||"record"}_${todayISO()}.json`;a.click();
+    const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+    a.download=`bp-backup_${patient.name||"record"}_${todayISO()}.json`; a.click();
+    const ts=nowStr(); localStorage.setItem(KEY_BACKUP_TS,ts); setLastBackup(ts);
     toast$("📥 บันทึกไฟล์สำรองในเครื่องแล้ว ✓");
   };
 
   // ── BACKUP all to Google Sheets ──
-  const backupToSheet = async()=>{
+  const backupToSheet = async () => {
     if(records.length===0){toast$("ยังไม่มีข้อมูลให้ backup","warn");return;}
-    setSyncing(true);setSyncProgress({current:0,total:records.length});
-    const res=await syncAllToSheet(records,patient.name,(cur,tot)=>setSyncProgress({current:cur,total:tot}));
-    setSyncing(false);setSyncProgress(null);
-    toast$(res.fail===0?`✅ อัปโหลด ${res.ok} รายการขึ้น Google Sheets สำเร็จ`:`⚠️ สำเร็จ ${res.ok} / ไม่สำเร็จ ${res.fail} รายการ`,res.fail===0?"ok":"warn",5000);
+    setSyncing(true); setSyncProg({current:0,total:records.length});
+    const res = await syncAllToSheet(records, patient.name, (cur,tot)=>setSyncProg({current:cur,total:tot}));
+    setSyncing(false); setSyncProg(null);
+    if(res.fail===0){
+      const ts=nowStr(); localStorage.setItem("bp-sheet-sync-ts",ts); setLastSheetSync(ts);
+    }
+    toast$(res.fail===0?`✅ อัปโหลด ${res.ok} รายการสำเร็จ`:`⚠️ สำเร็จ ${res.ok} / ไม่สำเร็จ ${res.fail} รายการ`,res.fail===0?"ok":"warn",5000);
   };
 
-  // ── TEST Backup ──
-  const testBackup = async () => {
-    const results = { device: false, sheet: false };
-    // Test 1: device backup
-    try {
-      const testData = { version: APP_VERSION, test: true, ts: Date.now() };
-      const blob = new Blob([JSON.stringify(testData)], { type:"application/json" });
-      const url  = URL.createObjectURL(blob);
-      URL.revokeObjectURL(url);
-      results.device = true;
-    } catch { results.device = false; }
-    // Test 2: Google Sheets
-    const testEntry = {
-      date: "TEST-" + todayISO(), morningTime:"08:00",
-      morningSys:"999", morningDia:"999", morningPulse:"99",
-      eveningTime:"", eveningSys:"", eveningDia:"", eveningPulse:"",
-      id: Date.now(),
-    };
-    const res = await syncToSheet(testEntry, "__TEST__");
-    results.sheet = res.ok;
-    const msg = [
-      results.device ? "✅ Backup เครื่อง: ใช้ได้" : "❌ Backup เครื่อง: ไม่สำเร็จ",
-      results.sheet  ? "✅ Google Sheets: ใช้ได้"  : "❌ Google Sheets: ไม่สำเร็จ (ตรวจสอบ Apps Script)",
-    ].join("  ·  ");
-    toast$(msg, results.device && results.sheet ? "ok" : "warn", 6000);
-  };
-    const file=e.target.files[0];if(!file)return;
+  // ── IMPORT ──
+  const importBackup = e => {
+    const file=e.target.files[0]; if(!file)return;
     const r=new FileReader();
     r.onload=ev=>{try{const d=JSON.parse(ev.target.result);if(d.records){setRecords(d.records);lsSet(KEY_RECORDS,d.records);}if(d.patient){setPatient(d.patient);lsSet(KEY_PATIENT,d.patient);}toast$(`📤 นำเข้า ${d.records?.length||0} รายการสำเร็จ ✓`);}catch{toast$("ไฟล์ไม่ถูกต้อง","err");}};
-    r.readAsText(file);e.target.value="";
+    r.readAsText(file); e.target.value="";
   };
 
-  // ── PRINT (iframe method — works on mobile) ──
-  const doPrint = ()=>{
-    if(!reportRef.current){toast$("ไม่พบข้อมูล","err");return;}
-    const content=reportRef.current.innerHTML;
-    const win=window.open("","_blank","width=800,height=600");
-    if(!win){toast$("กรุณาอนุญาต popup แล้วลองใหม่","warn");return;}
-    win.document.write(`<!DOCTYPE html><html><head>
+  // ── TEST BACKUP ──
+  const testBackup = async () => {
+    setTestResult({testing:true});
+    let devOk=false, sheetOk=false;
+    try{ const b=new Blob(["test"],{type:"application/json"}); URL.revokeObjectURL(URL.createObjectURL(b)); devOk=true; }catch{}
+    const testE={date:"TEST-"+todayISO(),id:Date.now(),morningSys:"999",morningDia:"999",morningPulse:"",morningTime:"",eveningSys:"",eveningDia:"",eveningPulse:"",eveningTime:""};
+    const res=await syncToSheet(testE,"__TEST__");
+    sheetOk=res.ok;
+    setTestResult({testing:false,devOk,sheetOk});
+    toast$(`เครื่อง: ${devOk?"✅":"❌"}  ·  Google Sheets: ${sheetOk?"✅":"❌"}`, devOk&&sheetOk?"ok":"warn", 5000);
+  };
+
+  // ── PRINT / PDF ── (เปิด popup แล้วพิมพ์)
+  const doPrint = () => {
+    if(!records.length){toast$("ยังไม่มีข้อมูล","warn");return;}
+    const rows = records.map(r=>{
+      const ms=bpStatus(r.morningSys,r.morningDia);
+      const es=bpStatus(r.eveningSys,r.eveningDia);
+      const w=rank(ms)>=rank(es)?(ms||es):(es||ms);
+      return `<tr>
+        <td>${toThai(r.date)}</td>
+        <td style="color:#92400e">${r.morningTime||"–"}</td>
+        <td style="font-weight:700;color:${ms?ms.fg:"#000"}">${r.morningSys||"–"}</td>
+        <td>${r.morningDia||"–"}</td>
+        <td>${r.morningPulse||"–"}</td>
+        <td style="color:#1d4ed8">${r.eveningTime||"–"}</td>
+        <td style="font-weight:700;color:${es?es.fg:"#000"}">${r.eveningSys||"–"}</td>
+        <td>${r.eveningDia||"–"}</td>
+        <td>${r.eveningPulse||"–"}</td>
+        <td style="background:${w?w.bg:"#fff"};color:${w?w.fg:"#000"};font-weight:700">${w?w.label:""}</td>
+      </tr>`;
+    }).join("");
+    const html=`<!DOCTYPE html><html><head>
       <meta charset="utf-8"/>
-      <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700;800&display=swap" rel="stylesheet"/>
-      <style>*{box-sizing:border-box;font-family:'Sarabun',sans-serif;}body{margin:15mm;background:white;}@page{size:A4 portrait;margin:15mm;}table{width:100%;border-collapse:collapse;}th,td{border:1.5px solid #e2e8f0;padding:7px 8px;}</style>
-      </head><body>${content}</body></html>`);
-    win.document.close();
-    setTimeout(()=>{win.focus();win.print();},600);
+      <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700;800&display=swap" rel="stylesheet"/>
+      <style>
+        *{font-family:'Sarabun',sans-serif;box-sizing:border-box;}
+        body{margin:0;padding:15mm;background:white;}
+        @page{size:A4 portrait;margin:15mm;}
+        h2{text-align:center;color:#0369a1;margin-bottom:4px;font-size:18px;}
+        .info{text-align:center;color:#64748b;font-size:13px;margin-bottom:12px;}
+        table{width:100%;border-collapse:collapse;font-size:11px;page-break-inside:auto;}
+        tr{page-break-inside:avoid;}
+        th,td{border:1px solid #cbd5e1;padding:5px 6px;text-align:center;}
+        th{background:#0284c7;color:white;font-weight:700;}
+        tr:nth-child(even){background:#f8fafc;}
+        .legend{margin-top:10px;display:flex;gap:16px;font-size:11px;}
+        .dot{width:10px;height:10px;border-radius:2px;display:inline-block;margin-right:4px;}
+        .footer{text-align:right;font-size:10px;color:#94a3b8;margin-top:8px;}
+      </style>
+    </head><body>
+      <h2>📋 รายงานความดันโลหิต</h2>
+      <div class="info">
+        ${patient.name?`👤 ${patient.name}`:""} ${patient.phone?`· 📞 ${patient.phone}`:""}
+        <br/>พิมพ์วันที่ ${toThai(todayISO())} · ${records.length} รายการ
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th rowspan="2">วันที่</th>
+            <th colspan="4" style="background:#b45309">ช่วงเช้า</th>
+            <th colspan="4" style="background:#0369a1">ช่วงเย็น/กลางคืน</th>
+            <th rowspan="2">สถานะ</th>
+          </tr>
+          <tr>
+            <th style="background:#92400e">เวลา</th><th style="background:#92400e">ตัวบน</th><th style="background:#92400e">ตัวล่าง</th><th style="background:#92400e">ชีพจร</th>
+            <th style="background:#1d4ed8">เวลา</th><th style="background:#1d4ed8">ตัวบน</th><th style="background:#1d4ed8">ตัวล่าง</th><th style="background:#1d4ed8">ชีพจร</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div class="legend">
+        <span><span class="dot" style="background:#dcfce7;border:1px solid #166534"></span><span style="color:#166534">ปกติ &lt;120/80</span></span>
+        <span><span class="dot" style="background:#fef9c3;border:1px solid #854d0e"></span><span style="color:#854d0e">สูงเล็กน้อย 120-129</span></span>
+        <span><span class="dot" style="background:#ffedd5;border:1px solid #9a3412"></span><span style="color:#9a3412">สูงระดับ 1 130-139</span></span>
+        <span><span class="dot" style="background:#fee2e2;border:1px solid #991b1b"></span><span style="color:#991b1b">สูงระดับ 2 ≥140</span></span>
+      </div>
+      <div class="footer">Home BP Tracker ${APP_VERSION} · ค่าปกติ &lt;120/80 mmHg</div>
+      <script>window.onload=()=>{window.print();}</script>
+    </body></html>`;
+    const win=window.open("","_blank");
+    if(!win){toast$("กรุณาอนุญาต Popup แล้วลองใหม่","warn");return;}
+    win.document.write(html); win.document.close();
   };
 
   // ── SAVE JPG ──
-  const saveJPG = async()=>{
-    if(!reportRef.current){return;}
-    if(!window.html2canvas){toast$("กำลังโหลด รอแล้วลองใหม่","warn");return;}
+  const saveJPG = async () => {
+    if(!reportRef.current) return;
+    if(!window.html2canvas){toast$("กำลังโหลด กรุณารอแล้วลองใหม่","warn");return;}
     setCapturing(true);
     try{
       const canvas=await window.html2canvas(reportRef.current,{scale:2.5,useCORS:true,backgroundColor:"#ffffff",logging:false});
       const dataUrl=canvas.toDataURL("image/jpeg",0.93);
-      if(navigator.canShare){const blob=await(await fetch(dataUrl)).blob();const file=new File([blob],`ความดัน_${patient.name||"record"}.jpg`,{type:"image/jpeg"});if(navigator.canShare({files:[file]})){await navigator.share({files:[file],title:"รายงานความดันโลหิต"});toast$("แชร์สำเร็จ ✓");setCapturing(false);return;}}
+      if(navigator.canShare){
+        const blob=await(await fetch(dataUrl)).blob();
+        const file=new File([blob],`ความดัน_${patient.name||"record"}.jpg`,{type:"image/jpeg"});
+        if(navigator.canShare({files:[file]})){await navigator.share({files:[file],title:"รายงานความดันโลหิต"});toast$("แชร์สำเร็จ ✓");setCapturing(false);return;}
+      }
       const a=document.createElement("a");a.href=dataUrl;a.download=`ความดัน_${patient.name||"record"}_${todayISO()}.jpg`;a.click();
       toast$("บันทึกรูปภาพแล้ว ✓");
     }catch{toast$("เกิดข้อผิดพลาด","err");}
@@ -381,9 +513,9 @@ export default function App() {
   // ── ADMIN ──
   const handleVerTap=()=>{const n=adminTap+1;if(n>=5){setShowAdmin(true);setAdminTap(0);}else{setAdminTap(n);setTimeout(()=>setAdminTap(0),3000);}};
 
+  const rec=getRec(records);
   const mStatus=bpStatus(form.morningSys,form.morningDia);
   const eStatus=bpStatus(form.eveningSys,form.eveningDia);
-  const rec=getRec(records);
 
   const S={
     app:     {fontFamily:"'Sarabun', sans-serif",background:"#f0f9ff",minHeight:"100vh",maxWidth:520,margin:"0 auto",paddingBottom:90},
@@ -393,8 +525,8 @@ export default function App() {
     btnMain: {width:"100%",padding:"18px",background:"linear-gradient(135deg,#0284c7,#075985)",color:"white",border:"none",borderRadius:14,fontSize:20,fontWeight:800,fontFamily:"Sarabun,sans-serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8},
     btnGhost:{flex:1,padding:"15px",borderRadius:12,border:"2px solid #0284c7",background:"white",color:"#0284c7",fontSize:17,fontWeight:700,fontFamily:"Sarabun,sans-serif",cursor:"pointer",textAlign:"center"},
     tabBar:  {position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:520,background:"white",borderTop:"2px solid #e2e8f0",display:"flex",zIndex:100},
-    tabItem: a=>({flex:1,padding:"10px 4px 8px",border:"none",background:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2,color:a?"#0284c7":"#94a3b8",fontFamily:"Sarabun,sans-serif",fontSize:13,fontWeight:a?800:500}),
-    badge:   st=>({display:"inline-block",padding:"4px 12px",borderRadius:20,fontSize:14,fontWeight:800,background:st.bg,color:st.fg}),
+    tabItem: a=>({flex:1,padding:"10px 2px 8px",border:"none",background:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2,color:a?"#0284c7":"#94a3b8",fontFamily:"Sarabun,sans-serif",fontSize:12,fontWeight:a?800:500}),
+    badge:   st=>({display:"inline-block",padding:"4px 10px",borderRadius:20,fontSize:13,fontWeight:800,background:st.bg,color:st.fg}),
     histCard:{background:"white",borderRadius:16,padding:18,margin:"0 14px 12px",boxShadow:"0 2px 6px rgba(0,0,0,0.07)",borderLeft:"5px solid"},
     secTitle:{fontSize:20,fontWeight:800,marginBottom:16,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"},
   };
@@ -407,10 +539,10 @@ export default function App() {
       <style>{`*{-webkit-tap-highlight-color:transparent;box-sizing:border-box;}input[type=number]::-webkit-inner-spin-button{opacity:.4;}`}</style>
 
       {/* Toast */}
-      {toast&&<div style={{position:"fixed",top:18,left:"50%",transform:"translateX(-50%)",background:toast.type==="err"?"#ef4444":toast.type==="warn"?"#f59e0b":"#22c55e",color:"white",padding:"15px 28px",borderRadius:30,fontSize:18,fontWeight:700,zIndex:9999,boxShadow:"0 4px 24px rgba(0,0,0,0.18)",whiteSpace:"nowrap",maxWidth:"90vw",textAlign:"center"}}>{toast.msg}</div>}
+      {toast&&<div style={{position:"fixed",top:18,left:"50%",transform:"translateX(-50%)",background:toast.type==="err"?"#ef4444":toast.type==="warn"?"#f59e0b":"#22c55e",color:"white",padding:"14px 24px",borderRadius:30,fontSize:17,fontWeight:700,zIndex:9999,boxShadow:"0 4px 24px rgba(0,0,0,0.18)",maxWidth:"92vw",textAlign:"center",lineHeight:1.5}}>{toast.msg}</div>}
 
       {/* Paywall */}
-      {showPaywall&&<Paywall adminCfg={adminCfg} onUnlock={doUnlock}/>}
+      {showPaywall&&<Paywall adminCfg={{...adminCfg,patientName:patient.name}} onUnlock={doUnlock} onBack={()=>setShowPaywall(false)}/>}
 
       {/* Delete Confirm */}
       {deleteConfirm&&(
@@ -427,87 +559,81 @@ export default function App() {
         </div>
       )}
 
-      {/* Sync Progress Modal */}
+      {/* Sync Progress */}
       {syncing&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:600,display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
           <div style={{background:"white",borderRadius:22,padding:28,width:"100%",maxWidth:320,textAlign:"center"}}>
             <div style={{fontSize:44,marginBottom:10}}>☁️</div>
             <div style={{fontWeight:800,fontSize:20,marginBottom:8}}>กำลังอัปโหลดข้อมูล</div>
-            <div style={{color:"#64748b",fontSize:16,marginBottom:16}}>{syncProgress?.current} / {syncProgress?.total} รายการ</div>
-            <div style={{background:"#e2e8f0",borderRadius:10,height:12,overflow:"hidden"}}>
-              <div style={{background:"linear-gradient(135deg,#0284c7,#0ea5e9)",height:"100%",borderRadius:10,width:`${syncProgress?Math.round(syncProgress.current/syncProgress.total*100):0}%`,transition:"width 0.3s"}}/>
+            <div style={{color:"#64748b",fontSize:16,marginBottom:14}}>{syncProg?.current} / {syncProg?.total} รายการ</div>
+            <div style={{background:"#e2e8f0",borderRadius:10,height:14,overflow:"hidden"}}>
+              <div style={{background:"linear-gradient(135deg,#0284c7,#0ea5e9)",height:"100%",borderRadius:10,width:`${syncProg?Math.round(syncProg.current/syncProg.total*100):0}%`,transition:"width 0.3s"}}/>
             </div>
-            <div style={{marginTop:8,fontSize:14,color:"#94a3b8"}}>{syncProgress?Math.round(syncProgress.current/syncProgress.total*100):0}%</div>
+            <div style={{marginTop:8,fontSize:15,color:"#64748b"}}>{syncProg?Math.round(syncProg.current/syncProg.total*100):0}%</div>
           </div>
         </div>
       )}
 
       {/* Guide Modal */}
       {showGuide&&(
-        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:600,display:"flex",alignItems:"center",justifyContent:"center",padding:20,overflowY:"auto"}}>
-          <div style={{background:"white",borderRadius:22,padding:24,width:"100%",maxWidth:400,margin:"auto"}}>
-            <div style={{textAlign:"center",marginBottom:16}}>
-              <div style={{fontSize:40}}>📖</div>
-              <div style={{fontWeight:800,fontSize:22,color:"#0284c7"}}>คู่มือการใช้งาน</div>
-            </div>
-            {[
-              {icon:"➕",title:"บันทึกความดัน",desc:"กดแท็บ 'บันทึก' → กรอกวันที่, ค่าเช้า/เย็น → กดบันทึก ข้อมูลจะซิงค์ Google Sheets อัตโนมัติ"},
-              {icon:"📋",title:"ดูประวัติ",desc:"กดแท็บ 'ประวัติ' เพื่อดูรายการย้อนหลัง กราฟ และคำแนะนำสุขภาพ"},
-              {icon:"📸",title:"รายงาน",desc:"กดแท็บ 'รายงาน' → บันทึกเป็นรูปภาพ JPG หรือพิมพ์ A4"},
-              {icon:"⚙️",title:"ตั้งค่า",desc:"กรอกชื่อ-เบอร์โทร และ backup ข้อมูลสำรองไว้เสมอ"},
-              {icon:"💓",title:"เกณฑ์ความดัน",desc:"ปกติ: <120/80 · สูงเล็กน้อย: 120-129/<80 · สูงระดับ 1: 130-139/80-89 · สูงระดับ 2: ≥140/≥90 mmHg"},
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:600,display:"flex",alignItems:"center",justifyContent:"center",padding:16,overflowY:"auto"}}>
+          <div style={{background:"white",borderRadius:22,padding:22,width:"100%",maxWidth:400,margin:"auto"}}>
+            <div style={{textAlign:"center",marginBottom:14}}><div style={{fontSize:36}}>📖</div><div style={{fontWeight:800,fontSize:22,color:"#0284c7"}}>คู่มือการใช้งาน</div></div>
+            {[{icon:"➕",t:"บันทึกความดัน",d:"กดแท็บ 'บันทึก' → เลือกวันที่ → กรอกค่าเช้า หรือ เย็น หรือทั้งคู่ → กดบันทึก ข้อมูลซิงค์ Google Sheets อัตโนมัติ"},
+              {icon:"📋",t:"ดูประวัติ & แก้ไข",d:"กดแท็บ 'ประวัติ' ดูรายการ กราฟ คำแนะนำ กด ✏️ เพื่อแก้ไขเพิ่มข้อมูลในรายการที่มีอยู่แล้ว"},
+              {icon:"📸",t:"รายงาน",d:"บันทึกเป็นรูปภาพ JPG หรือกด 'พิมพ์ A4' จะเปิดหน้าต่างพิมพ์ใหม่ รองรับหลายหน้า"},
+              {icon:"⚙️",t:"ตั้งค่า & Backup",d:"กรอกชื่อ-เบอร์ และกด backup ทุกสัปดาห์ มีแสดงเวลาล่าสุดที่ backup"},
+              {icon:"💓",t:"เกณฑ์ความดัน",d:"ปกติ <120/80 · สูงเล็กน้อย 120-129 · สูงระดับ 1 130-139 · สูงระดับ 2 ≥140 (mmHg)"},
             ].map((item,i)=>(
-              <div key={i} style={{display:"flex",gap:14,marginBottom:14,padding:"12px 14px",background:"#f8fafc",borderRadius:12}}>
-                <div style={{fontSize:28,flexShrink:0}}>{item.icon}</div>
-                <div>
-                  <div style={{fontWeight:800,fontSize:17,color:"#0f172a",marginBottom:3}}>{item.title}</div>
-                  <div style={{fontSize:15,color:"#64748b",lineHeight:1.6}}>{item.desc}</div>
-                </div>
+              <div key={i} style={{display:"flex",gap:12,marginBottom:12,padding:"12px 14px",background:"#f8fafc",borderRadius:12}}>
+                <div style={{fontSize:26,flexShrink:0}}>{item.icon}</div>
+                <div><div style={{fontWeight:800,fontSize:17,marginBottom:2}}>{item.t}</div><div style={{fontSize:14,color:"#64748b",lineHeight:1.6}}>{item.d}</div></div>
               </div>
             ))}
-            <button onClick={()=>setShowGuide(false)} style={{...S.btnMain,marginTop:6}}>เข้าใจแล้ว ✓</button>
+            <button onClick={()=>setShowGuide(false)} style={{...S.btnMain,marginTop:4}}>เข้าใจแล้ว ✓</button>
           </div>
         </div>
       )}
 
       {/* Admin Modal */}
       {showAdmin&&(
-        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:700,display:"flex",alignItems:"center",justifyContent:"center",padding:20,overflowY:"auto"}}>
-          <div style={{background:"white",borderRadius:22,padding:24,width:"100%",maxWidth:400,margin:"auto"}}>
-            <div style={{fontWeight:800,fontSize:22,marginBottom:16,color:"#0284c7"}}>🔧 Admin Panel</div>
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:700,display:"flex",alignItems:"center",justifyContent:"center",padding:16,overflowY:"auto"}}>
+          <div style={{background:"white",borderRadius:22,padding:22,width:"100%",maxWidth:400,margin:"auto"}}>
+            <div style={{fontWeight:800,fontSize:22,marginBottom:14,color:"#0284c7"}}>🔧 Admin Panel</div>
             {!adminAuth?(
               <div>
-                <Input label="รหัสผ่าน Admin" type="password" value={adminPass} onChange={setAdminPass} placeholder="admin1234"/>
+                <Input label="รหัสผ่าน Admin" type="password" value={adminPass} onChange={setAdminPass} placeholder="กรอกรหัส Admin"/>
                 <div style={{marginTop:12,display:"flex",gap:10}}>
-                  <button onClick={()=>{setShowAdmin(false);setAdminPass("");}} style={{...S.btnGhost}}>ยกเลิก</button>
+                  <button onClick={()=>{setShowAdmin(false);setAdminPass("");}} style={S.btnGhost}>ยกเลิก</button>
                   <button onClick={async()=>{
                     setAdminLoading(true);
-                    const valid = await verifyCode("admin", adminPass);
+                    const v=await verifyCode("admin",adminPass);
                     setAdminLoading(false);
-                    if(valid){setAdminAuth(true);}
-                    else{toast$("รหัสผ่านไม่ถูกต้อง","err");}
+                    if(v){setAdminAuth(true);}else toast$("รหัสผ่านไม่ถูกต้อง","err");
                   }} style={{...S.btnMain,flex:1}} disabled={adminLoading}>
-                    {adminLoading?"⏳ กำลังตรวจสอบ...":"เข้าสู่ระบบ"}
+                    {adminLoading?"⏳ ตรวจสอบ...":"เข้าสู่ระบบ"}
                   </button>
                 </div>
               </div>
             ):(
               <div style={{display:"flex",flexDirection:"column",gap:12}}>
-                <div style={{background:"#f0fdf4",borderRadius:12,padding:12,fontSize:14,color:"#166534"}}>
-                  📊 ข้อมูลในเครื่องนี้: <strong>{records.length}</strong> รายการ · ผู้ใช้: <strong>{patient.name||"ยังไม่ตั้งชื่อ"}</strong>
+                <div style={{background:"#f0fdf4",borderRadius:12,padding:12,fontSize:14,color:"#166534",lineHeight:1.7}}>
+                  📊 รายการในเครื่องนี้: <strong>{records.length}</strong> รายการ<br/>
+                  👤 ผู้ใช้: <strong>{patient.name||"ยังไม่ตั้งชื่อ"}</strong><br/>
+                  📬 แจ้งเตือน Admin: {ADMIN_EMAIL} · Line: {ADMIN_LINE}
                 </div>
-                <Input label="รหัสปลดล็อค Full Version" value={adminCfg.unlockCode||""} onChange={v=>setAdminCfg(c=>({...c,unlockCode:v}))} placeholder="BP2024FREE"/>
-                <Input label="รหัสผ่าน Admin (ใหม่)" type="password" value={adminCfg.adminPass||""} onChange={v=>setAdminCfg(c=>({...c,adminPass:v}))} placeholder="admin1234"/>
-                <Input label="ราคา Full Version" value={adminCfg.price||""} onChange={v=>setAdminCfg(c=>({...c,price:v}))} placeholder="299 บาท/ตลอดชีพ"/>
+                <Input label="ราคา Full Version" value={adminCfg.price||""} onChange={v=>setAdminCfg(c=>({...c,price:v}))} placeholder="เช่น 299 บาท/ตลอดชีพ"/>
+                <Input label="เบอร์ติดต่อ Admin" value={adminCfg.phone||""} onChange={v=>setAdminCfg(c=>({...c,phone:v}))} placeholder="เช่น 089-xxx-xxxx"/>
                 <Input label="ธนาคาร" value={adminCfg.bankName||""} onChange={v=>setAdminCfg(c=>({...c,bankName:v}))} placeholder="กสิกรไทย"/>
                 <Input label="เลขบัญชี" value={adminCfg.accountNo||""} onChange={v=>setAdminCfg(c=>({...c,accountNo:v}))} placeholder="xxx-x-xxxxx-x"/>
                 <Input label="ชื่อเจ้าของบัญชี" value={adminCfg.accountName||""} onChange={v=>setAdminCfg(c=>({...c,accountName:v}))} placeholder="ชื่อ นามสกุล"/>
                 <Input label="URL รูป QR Code" value={adminCfg.qrUrl||""} onChange={v=>setAdminCfg(c=>({...c,qrUrl:v}))} placeholder="https://..."/>
-                <div style={{background:"#fffbeb",borderRadius:12,padding:12,fontSize:14,color:"#713f12",lineHeight:1.7}}>
-                  💡 ดูข้อมูลคนไข้ทั้งหมดได้ที่ Google Sheets sheet "BP_Records"<br/>ข้อมูลทุกคนจะรวมอยู่ที่นั่น
+                <div style={{background:"#fffbeb",borderRadius:12,padding:12,fontSize:13,color:"#713f12",lineHeight:1.7}}>
+                  💡 รหัสปลดล็อคและรหัส Admin ตั้งที่ Vercel → Environment Variables<br/>
+                  UNLOCK_CODE และ ADMIN_PASS
                 </div>
                 <div style={{display:"flex",gap:10}}>
-                  <button onClick={()=>{setShowAdmin(false);setAdminAuth(false);setAdminPass("");}} style={{...S.btnGhost}}>ปิด</button>
+                  <button onClick={()=>{setShowAdmin(false);setAdminAuth(false);setAdminPass("");}} style={S.btnGhost}>ปิด</button>
                   <button onClick={()=>{lsSet(KEY_ADMIN,adminCfg);toast$("บันทึกการตั้งค่าแล้ว");setShowAdmin(false);setAdminAuth(false);setAdminPass("");}} style={{...S.btnMain,flex:1,fontSize:17}}>💾 บันทึก</button>
                 </div>
               </div>
@@ -520,68 +646,36 @@ export default function App() {
       <div style={S.header}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
           <div>
-            <div style={{fontSize:12,opacity:.75,letterSpacing:".1em",textTransform:"uppercase",marginBottom:4}}>Home BP Tracker</div>
-            <div style={{fontSize:28,fontWeight:800}}>บันทึกความดันโลหิต</div>
-            {patient.name&&<div style={{fontSize:18,opacity:.9,marginTop:3}}>👤 {patient.name}</div>}
-            {!isUnlocked&&<div style={{fontSize:13,background:"rgba(255,255,255,.2)",borderRadius:8,padding:"3px 10px",marginTop:5,display:"inline-block"}}>⏳ ทดลองใช้ {trialLeft} วัน</div>}
-            {isUnlocked&&<div style={{fontSize:13,background:"rgba(255,255,255,.2)",borderRadius:8,padding:"3px 10px",marginTop:5,display:"inline-block"}}>✅ Full Version</div>}
+            <div style={{fontSize:11,opacity:.75,letterSpacing:".1em",textTransform:"uppercase",marginBottom:4}}>Home BP Tracker</div>
+            <div style={{fontSize:26,fontWeight:800}}>บันทึกความดันโลหิต</div>
+            {patient.name&&<div style={{fontSize:17,opacity:.9,marginTop:2}}>👤 {patient.name}</div>}
+            {!isUnlocked&&<div style={{fontSize:13,background:"rgba(255,255,255,.2)",borderRadius:8,padding:"3px 10px",marginTop:4,display:"inline-block"}}>⏳ ทดลองใช้ เหลือ {trialLeft} วัน (ใช้ไป {daysUsed} วัน)</div>}
+            {isUnlocked&&<div style={{fontSize:13,background:"rgba(255,255,255,.2)",borderRadius:8,padding:"3px 10px",marginTop:4,display:"inline-block"}}>✅ Full Version ไม่จำกัดวัน</div>}
           </div>
-          <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6}}>
-            <div style={{background:"rgba(255,255,255,.2)",borderRadius:14,padding:"8px 16px",textAlign:"center"}}>
-              <div style={{fontSize:30,fontWeight:800,lineHeight:1}}>{records.length}</div>
-              <div style={{fontSize:13,opacity:.85}}>รายการ</div>
+          <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:5}}>
+            <div style={{background:"rgba(255,255,255,.2)",borderRadius:14,padding:"7px 14px",textAlign:"center"}}>
+              <div style={{fontSize:28,fontWeight:800,lineHeight:1}}>{records.length}</div>
+              <div style={{fontSize:12,opacity:.85}}>รายการ</div>
             </div>
             <button onClick={handleVerTap} style={{background:"rgba(255,255,255,.15)",border:"none",borderRadius:8,color:"white",fontSize:12,padding:"4px 10px",cursor:"pointer",fontFamily:"Sarabun,sans-serif"}}>{APP_VERSION}</button>
           </div>
         </div>
       </div>
 
-      {/* ═══ HOME TAB ═══ */}
+      {/* ═══ HOME ═══ */}
       {tab==="home"&&(
-        <div style={{paddingTop:20}}>
-          {/* Onboarding Steps */}
+        <div style={{paddingTop:18}}>
           <div style={{padding:"0 14px",marginBottom:14}}>
             <div style={{fontWeight:800,fontSize:19,marginBottom:14,color:"#0369a1"}}>🚀 เริ่มต้นใช้งาน</div>
             {[
-              {
-                num:1,
-                icon:"📱",
-                title:"เพิ่ม Shortcut ที่หน้าจอมือถือ",
-                desc:"เพื่อเปิดแอปได้เร็วโดยไม่ต้องจำลิงก์",
-                color:"#0284c7",
-                bg:"#eff6ff",
-                action:()=>{
-                  if(/iPhone|iPad|iPod/.test(navigator.userAgent)){
-                    toast$('🍎 iOS: กด Share → "Add to Home Screen"',"ok",5000);
-                  } else {
-                    toast$('🤖 Android: กด ⋮ เมนู → "Add to Home screen"',"ok",5000);
-                  }
-                }
-              },
-              {
-                num:2,
-                icon:"📖",
-                title:"อ่านคำแนะนำการใช้งาน",
-                desc:"ทำความเข้าใจระบบก่อนเริ่มบันทึก",
-                color:"#059669",
-                bg:"#f0fdf4",
-                action:()=>setShowGuide(true)
-              },
-              {
-                num:3,
-                icon:"☁️",
-                title:"Backup ข้อมูล",
-                desc:"เก็บสำรองในเครื่องและอัปโหลดขึ้น Google Sheets",
-                color:"#7c3aed",
-                bg:"#faf5ff",
-                action:()=>setTab("settings")
-              },
+              {num:1,icon:"📱",title:"เพิ่ม Shortcut ที่หน้าจอมือถือ",desc:"เปิดแอปได้เร็วโดยไม่ต้องจำลิงก์",color:"#0284c7",bg:"#eff6ff",
+                action:()=>{if(/iPhone|iPad|iPod/.test(navigator.userAgent)){toast$('🍎 iOS: กด Share ↗ → "Add to Home Screen"',"ok",5000);}else{toast$('🤖 Android: กด ⋮ เมนู → "Add to Home screen"',"ok",5000);}}},
+              {num:2,icon:"📖",title:"อ่านคำแนะนำการใช้งาน",desc:"ทำความเข้าใจระบบก่อนเริ่มบันทึก",color:"#059669",bg:"#f0fdf4",action:()=>setShowGuide(true)},
+              {num:3,icon:"☁️",title:"Backup ข้อมูล",desc:"เก็บสำรองในเครื่องและ Google Sheets",color:"#7c3aed",bg:"#faf5ff",action:()=>setTab("settings")},
             ].map(step=>(
               <button key={step.num} onClick={step.action}
-                style={{width:"100%",display:"flex",alignItems:"center",gap:14,background:step.bg,borderRadius:16,padding:"16px 18px",marginBottom:12,border:`2px solid ${step.color}20`,cursor:"pointer",textAlign:"left"}}>
-                <div style={{width:44,height:44,borderRadius:12,background:step.color,color:"white",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0,fontWeight:800}}>
-                  {step.num}
-                </div>
+                style={{width:"100%",display:"flex",alignItems:"center",gap:14,background:step.bg,borderRadius:16,padding:"16px 18px",marginBottom:12,border:`2px solid ${step.color}20`,cursor:"pointer",textAlign:"left",fontFamily:"Sarabun,sans-serif"}}>
+                <div style={{width:44,height:44,borderRadius:12,background:step.color,color:"white",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0,fontWeight:800}}>{step.num}</div>
                 <div style={{flex:1}}>
                   <div style={{fontSize:17,fontWeight:800,color:"#0f172a",marginBottom:2}}>{step.icon} {step.title}</div>
                   <div style={{fontSize:14,color:"#64748b"}}>{step.desc}</div>
@@ -591,7 +685,6 @@ export default function App() {
             ))}
           </div>
 
-          {/* Quick Stats */}
           {records.length>0&&(()=>{
             const last=records[records.length-1];
             const ms=bpStatus(last.morningSys,last.morningDia);
@@ -599,8 +692,7 @@ export default function App() {
             const w=rank(ms)>=rank(es)?(ms||es):(es||ms);
             return(
               <div style={{...S.card,borderLeft:`5px solid ${w?w.bar:"#22c55e"}`}}>
-                <div style={{fontWeight:800,fontSize:17,marginBottom:10}}>📊 บันทึกล่าสุด</div>
-                <div style={{fontSize:16,color:"#64748b",marginBottom:8}}>{toThai(last.date)}</div>
+                <div style={{fontWeight:800,fontSize:17,marginBottom:8}}>📊 บันทึกล่าสุด — {toThai(last.date)}</div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
                   {last.morningSys&&<div style={{background:"#fefce8",borderRadius:10,padding:"10px 12px"}}>
                     <div style={{fontSize:13,color:"#92400e",fontWeight:700}}>🌅 เช้า {last.morningTime&&`· ${last.morningTime}`}</div>
@@ -617,38 +709,36 @@ export default function App() {
           })()}
 
           <div style={{padding:"0 14px 16px"}}>
-            <button onClick={()=>setTab("record")} style={{...S.btnMain,fontSize:22,padding:"20px"}}>
-              ➕  บันทึกความดันวันนี้
-            </button>
+            <button onClick={()=>setTab("record")} style={{...S.btnMain,fontSize:22,padding:"20px"}}>➕ บันทึกความดันวันนี้</button>
           </div>
         </div>
       )}
 
-      {/* ═══ RECORD TAB ═══ */}
+      {/* ═══ RECORD ═══ */}
       {tab==="record"&&(
         <div style={{paddingTop:16}}>
+          {editRecord&&(
+            <div style={{margin:"0 14px 10px",background:"#fef9c3",borderRadius:12,padding:"10px 14px",fontSize:15,color:"#92400e",fontWeight:700}}>
+              ✏️ กำลังแก้ไขวันที่ {toThai(editRecord.date)} — กดบันทึกเพื่ออัปเดต
+              <button onClick={()=>{setEditRecord(null);setForm(emptyForm);}} style={{float:"right",background:"none",border:"none",color:"#9a3412",cursor:"pointer",fontSize:20}}>✕</button>
+            </div>
+          )}
           <div style={S.card}>
             <Input label="📅  วัน เดือน ปี" type="date" value={form.date} onChange={setF("date")}/>
-            {/* แสดงสถานะวันที่เลือก */}
             {(()=>{
-              const ex = records.find(r=>r.date===form.date);
-              if(!ex) return (
-                <div style={{marginTop:10,fontSize:15,color:"#94a3b8",background:"#f8fafc",borderRadius:10,padding:"8px 12px"}}>
-                  📝 วันใหม่ — กรอกเช้า หรือ เย็น หรือทั้งคู่ก็ได้
+              const ex=records.find(r=>r.date===form.date);
+              if(!ex) return <div style={{marginTop:10,fontSize:15,color:"#94a3b8",background:"#f8fafc",borderRadius:10,padding:"8px 12px"}}>📝 วันใหม่ — กรอกเช้า หรือ เย็น หรือทั้งคู่ก็ได้</div>;
+              return <div style={{marginTop:10,fontSize:15,background:"#fefce8",borderRadius:10,padding:"10px 12px",border:"1.5px solid #fde68a"}}>
+                <div style={{fontWeight:700,color:"#92400e",marginBottom:3}}>✏️ มีข้อมูลวันนี้แล้ว — เพิ่ม/แก้ไขได้เลย</div>
+                <div style={{color:"#78350f",fontSize:14}}>
+                  {ex.morningSys?`🌅 เช้า: ${ex.morningSys}/${ex.morningDia}`:"🌅 เช้า: ยังไม่มี"}
+                  {"  ·  "}
+                  {ex.eveningSys?`🌙 เย็น: ${ex.eveningSys}/${ex.eveningDia}`:"🌙 เย็น: ยังไม่มี"}
                 </div>
-              );
-              return (
-                <div style={{marginTop:10,fontSize:15,background:"#fefce8",borderRadius:10,padding:"10px 12px",border:"1.5px solid #fde68a"}}>
-                  <div style={{fontWeight:700,color:"#92400e",marginBottom:4}}>✏️ มีข้อมูลวันนี้แล้ว — เพิ่มเติมได้เลย</div>
-                  <div style={{color:"#78350f",fontSize:14}}>
-                    {ex.morningSys ? `🌅 เช้า: ${ex.morningSys}/${ex.morningDia}` : "🌅 เช้า: ยังไม่มีข้อมูล"}
-                    {"  ·  "}
-                    {ex.eveningSys ? `🌙 เย็น: ${ex.eveningSys}/${ex.eveningDia}` : "🌙 เย็น: ยังไม่มีข้อมูล"}
-                  </div>
-                </div>
-              );
+              </div>;
             })()}
           </div>
+
           <div style={{...S.card,borderTop:"4px solid #f59e0b"}}>
             <div style={{...S.secTitle,color:"#b45309"}}><span style={{fontSize:26}}>🌅</span>ช่วงเช้า{mStatus&&<span style={S.badge(mStatus)}>{mStatus.label}</span>}</div>
             <div style={{marginBottom:14}}><Input label="เวลา" type="time" value={form.morningTime} onChange={setF("morningTime")}/></div>
@@ -658,6 +748,7 @@ export default function App() {
             </div>
             <div style={{marginTop:14}}><Input label="ชีพจร" type="number" value={form.morningPulse} onChange={setF("morningPulse")} placeholder="75" unit="bpm"/></div>
           </div>
+
           <div style={{...S.card,borderTop:"4px solid #0284c7"}}>
             <div style={{...S.secTitle,color:"#0369a1"}}><span style={{fontSize:26}}>🌙</span>ช่วงเย็น / กลางคืน{eStatus&&<span style={S.badge(eStatus)}>{eStatus.label}</span>}</div>
             <div style={{marginBottom:14}}><Input label="เวลา" type="time" value={form.eveningTime} onChange={setF("eveningTime")}/></div>
@@ -667,9 +758,11 @@ export default function App() {
             </div>
             <div style={{marginTop:14}}><Input label="ชีพจร" type="number" value={form.eveningPulse} onChange={setF("eveningPulse")} placeholder="75" unit="bpm"/></div>
           </div>
+
           <div style={{padding:"0 14px 16px"}}>
-            <button onClick={submit} disabled={saving} style={S.btnMain}>{saving?"⏳  กำลังบันทึก...":"💾  บันทึกความดัน"}</button>
+            <button onClick={submit} disabled={saving} style={S.btnMain}>{saving?"⏳ กำลังบันทึก...":"💾 บันทึกความดัน"}</button>
           </div>
+
           <div style={S.card}>
             <div style={{fontWeight:800,marginBottom:12,fontSize:18}}>📊 เกณฑ์ระดับความดัน</div>
             {[{label:"ปกติ",range:"< 120/80",bg:"#dcfce7",fg:"#166534"},{label:"สูงเล็กน้อย",range:"120–129/< 80",bg:"#fef9c3",fg:"#854d0e"},{label:"สูงระดับ 1",range:"130–139/80–89",bg:"#ffedd5",fg:"#9a3412"},{label:"สูงระดับ 2",range:"≥ 140/≥ 90",bg:"#fee2e2",fg:"#991b1b"}].map(s=>(
@@ -682,7 +775,7 @@ export default function App() {
         </div>
       )}
 
-      {/* ═══ HISTORY TAB ═══ */}
+      {/* ═══ HISTORY ═══ */}
       {tab==="history"&&(
         <div style={{paddingTop:16}}>
           <div style={{padding:"0 14px 12px",display:"flex",gap:10}}>
@@ -716,7 +809,10 @@ export default function App() {
                       <div style={{fontWeight:800,fontSize:20}}>{toThai(r.date)}</div>
                       {worst&&<span style={{...S.badge(worst),marginTop:5,display:"inline-block"}}>{worst.label}</span>}
                     </div>
-                    <button onClick={()=>setDeleteConfirm(r)} style={{background:"none",border:"none",cursor:"pointer",fontSize:24,color:"#cbd5e1",padding:4}}>✕</button>
+                    <div style={{display:"flex",gap:6}}>
+                      <button onClick={()=>openEdit(r)} style={{background:"#eff6ff",border:"none",borderRadius:8,cursor:"pointer",fontSize:18,padding:"4px 10px",color:"#0284c7"}}>✏️</button>
+                      <button onClick={()=>setDeleteConfirm(r)} style={{background:"none",border:"none",cursor:"pointer",fontSize:22,color:"#cbd5e1",padding:4}}>✕</button>
+                    </div>
                   </div>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
                     {r.morningSys&&<div style={{background:"#fefce8",borderRadius:12,padding:"12px 14px"}}>
@@ -729,6 +825,12 @@ export default function App() {
                       <div style={{fontSize:28,fontWeight:800,lineHeight:1.1}}>{r.eveningSys}<span style={{fontSize:17}}>/{r.eveningDia}</span></div>
                       <div style={{fontSize:14,color:"#64748b",marginTop:3}}>💗 {r.eveningPulse} bpm</div>
                     </div>}
+                    {!r.morningSys&&<div style={{background:"#f8fafc",borderRadius:12,padding:"12px 14px",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                      <button onClick={()=>openEdit(r)} style={{background:"none",border:"2px dashed #cbd5e1",borderRadius:10,padding:"8px 14px",color:"#94a3b8",fontSize:14,cursor:"pointer",fontFamily:"Sarabun,sans-serif"}}>+ เพิ่มข้อมูลเช้า</button>
+                    </div>}
+                    {!r.eveningSys&&<div style={{background:"#f8fafc",borderRadius:12,padding:"12px 14px",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                      <button onClick={()=>openEdit(r)} style={{background:"none",border:"2px dashed #cbd5e1",borderRadius:10,padding:"8px 14px",color:"#94a3b8",fontSize:14,cursor:"pointer",fontFamily:"Sarabun,sans-serif"}}>+ เพิ่มข้อมูลเย็น</button>
+                    </div>}
                   </div>
                 </div>
               );
@@ -737,16 +839,17 @@ export default function App() {
         </div>
       )}
 
-      {/* ═══ REPORT TAB ═══ */}
+      {/* ═══ REPORT ═══ */}
       {tab==="report"&&(
         <div style={{paddingTop:16}}>
           <div style={{padding:"0 14px 12px"}}>
             <button onClick={saveJPG} disabled={capturing} style={{...S.btnMain,background:capturing?"#94a3b8":"linear-gradient(135deg,#0f766e,#0d9488)",marginBottom:10}}>
               {capturing?"⏳ กำลังสร้างรูปภาพ...":"📸 บันทึกเป็นรูปภาพ (JPG)"}
             </button>
-            <button onClick={doPrint} style={{...S.btnGhost,width:"100%",display:"block"}}>🖨️ พิมพ์ / PDF (A4)</button>
+            <button onClick={doPrint} style={{...S.btnGhost,width:"100%",display:"block",background:"#f0f9ff",border:"2px solid #0284c7"}}>
+              🖨️ พิมพ์ / PDF (A4) — เปิดหน้าต่างใหม่พร้อมพิมพ์
+            </button>
           </div>
-          {/* Capture target */}
           <div ref={reportRef} style={{margin:"0 14px 14px",background:"white",borderRadius:18,padding:20,boxShadow:"0 2px 8px rgba(0,0,0,0.07)"}}>
             <div style={{borderBottom:"3px solid #0284c7",paddingBottom:14,marginBottom:14,textAlign:"center"}}>
               <div style={{fontSize:20,fontWeight:800,color:"#0369a1"}}>📋 รายงานความดันโลหิต</div>
@@ -757,10 +860,10 @@ export default function App() {
               <table style={{width:"100%",borderCollapse:"collapse"}}>
                 <thead>
                   <tr>
-                    <th style={{border:"1.5px solid #e2e8f0",padding:"8px",background:"#f0f9ff",fontSize:13,textAlign:"left"}}>วันที่</th>
-                    <th colSpan={3} style={{border:"1.5px solid #e2e8f0",padding:"8px 4px",background:"#fefce8",fontSize:13,textAlign:"center"}}>🌅 เช้า</th>
-                    <th colSpan={3} style={{border:"1.5px solid #e2e8f0",padding:"8px 4px",background:"#eff6ff",fontSize:13,textAlign:"center"}}>🌙 เย็น</th>
-                    <th style={{border:"1.5px solid #e2e8f0",padding:"8px 4px",background:"#f0f9ff",fontSize:13,textAlign:"center"}}>สถานะ</th>
+                    <th style={{border:"1.5px solid #e2e8f0",padding:"7px 8px",background:"#f0f9ff",fontSize:13,textAlign:"left"}}>วันที่</th>
+                    <th colSpan={3} style={{border:"1.5px solid #e2e8f0",padding:"7px 4px",background:"#fefce8",fontSize:13,textAlign:"center"}}>🌅 เช้า</th>
+                    <th colSpan={3} style={{border:"1.5px solid #e2e8f0",padding:"7px 4px",background:"#eff6ff",fontSize:13,textAlign:"center"}}>🌙 เย็น</th>
+                    <th style={{border:"1.5px solid #e2e8f0",padding:"7px 4px",background:"#f0f9ff",fontSize:13,textAlign:"center"}}>สถานะ</th>
                   </tr>
                   <tr>
                     <th style={{border:"1.5px solid #e2e8f0",padding:"4px 8px"}}></th>
@@ -779,10 +882,10 @@ export default function App() {
                       <tr key={r.id} style={{background:i%2===0?"white":"#f8fafc"}}>
                         <td style={{border:"1.5px solid #e2e8f0",padding:"7px 8px",fontWeight:700,fontSize:13,whiteSpace:"nowrap"}}>{toThai(r.date)}</td>
                         <td style={{border:"1.5px solid #e2e8f0",padding:"7px 5px",textAlign:"center",fontSize:12,color:"#92400e"}}>{r.morningTime||"–"}</td>
-                        <td style={{border:"1.5px solid #e2e8f0",padding:"7px 5px",textAlign:"center",fontWeight:800,fontSize:16,color:ms?ms.fg:"#1e293b"}}>{r.morningSys||"–"}</td>
+                        <td style={{border:"1.5px solid #e2e8f0",padding:"7px 5px",textAlign:"center",fontWeight:800,fontSize:15,color:ms?ms.fg:"#1e293b"}}>{r.morningSys||"–"}</td>
                         <td style={{border:"1.5px solid #e2e8f0",padding:"7px 5px",textAlign:"center",fontWeight:700,fontSize:14}}>{r.morningDia||"–"}</td>
                         <td style={{border:"1.5px solid #e2e8f0",padding:"7px 5px",textAlign:"center",fontSize:12,color:"#1d4ed8"}}>{r.eveningTime||"–"}</td>
-                        <td style={{border:"1.5px solid #e2e8f0",padding:"7px 5px",textAlign:"center",fontWeight:800,fontSize:16,color:es?es.fg:"#1e293b"}}>{r.eveningSys||"–"}</td>
+                        <td style={{border:"1.5px solid #e2e8f0",padding:"7px 5px",textAlign:"center",fontWeight:800,fontSize:15,color:es?es.fg:"#1e293b"}}>{r.eveningSys||"–"}</td>
                         <td style={{border:"1.5px solid #e2e8f0",padding:"7px 5px",textAlign:"center",fontWeight:700,fontSize:14}}>{r.eveningDia||"–"}</td>
                         <td style={{border:"1.5px solid #e2e8f0",padding:"7px 4px",textAlign:"center"}}>{w&&<span style={{...S.badge(w),fontSize:11,padding:"2px 6px"}}>{w.label}</span>}</td>
                       </tr>
@@ -800,17 +903,18 @@ export default function App() {
               ))}
             </div>
           </div>
-          <div style={{textAlign:"center",fontSize:15,color:"#94a3b8",padding:"0 14px 20px",lineHeight:1.8}}>
+          <div style={{textAlign:"center",fontSize:14,color:"#94a3b8",padding:"0 14px 20px",lineHeight:1.8}}>
             💡 <strong>iOS:</strong> กด "บันทึกเป็นรูปภาพ" → Save Image<br/>
-            💡 <strong>Android:</strong> รูปดาวน์โหลดอัตโนมัติ
+            💡 <strong>Android:</strong> รูปดาวน์โหลดอัตโนมัติ<br/>
+            💡 <strong>พิมพ์ A4:</strong> กดปุ่มด้านบน → เลือกเครื่องพิมพ์หรือ Save as PDF
           </div>
         </div>
       )}
 
-      {/* ═══ SETTINGS TAB ═══ */}
+      {/* ═══ SETTINGS ═══ */}
       {tab==="settings"&&(
         <div style={{paddingTop:16}}>
-          {/* Patient Info */}
+          {/* Patient info */}
           <div style={S.card}>
             <div style={{fontWeight:800,fontSize:20,marginBottom:8}}>👤 ข้อมูลของฉัน</div>
             <div style={{fontSize:15,color:"#166534",background:"#f0fdf4",borderRadius:10,padding:"10px 14px",marginBottom:14}}>
@@ -823,77 +927,73 @@ export default function App() {
             </div>
           </div>
 
-          {/* BACKUP SECTION */}
+          {/* Trial / Unlock */}
+          {!isUnlocked&&(
+            <div style={{...S.card,borderLeft:"5px solid #f59e0b",background:"#fffbeb"}}>
+              <div style={{fontWeight:800,fontSize:20,marginBottom:6,color:"#92400e"}}>⏳ ระยะทดลองใช้</div>
+              <div style={{fontSize:16,color:"#713f12",marginBottom:4}}>
+                ใช้ไปแล้ว <strong>{daysUsed} วัน</strong> เหลือ <strong style={{fontSize:22,color:"#ef4444"}}>{trialLeft} วัน</strong>
+              </div>
+              <div style={{fontSize:14,color:"#78350f",marginBottom:12}}>
+                (นับจากวันที่ติดตั้งครั้งแรก {lsRaw(KEY_INSTALL)?toThai(lsRaw(KEY_INSTALL).slice(0,10)):"-"})
+              </div>
+              {adminCfg.phone&&<div style={{fontSize:15,color:"#92400e",marginBottom:10}}>📞 ติดต่อซื้อ Full Version: <strong>{adminCfg.phone}</strong></div>}
+              <button onClick={()=>setShowPaywall(true)} style={{...S.btnMain,background:"linear-gradient(135deg,#f59e0b,#d97706)"}}>🔓 อัปเกรด Full Version</button>
+            </div>
+          )}
+          {isUnlocked&&<div style={{...S.card,borderLeft:"5px solid #22c55e"}}><div style={{fontWeight:800,fontSize:20,color:"#166534"}}>✅ Full Version — ใช้งานได้ไม่จำกัดวัน</div></div>}
+
+          {/* Backup */}
           <div style={{...S.card,borderTop:"4px solid #7c3aed"}}>
-            <div style={{fontWeight:800,fontSize:20,marginBottom:6}}>☁️ สำรองข้อมูล</div>
-            <div style={{fontSize:15,color:"#64748b",marginBottom:14,lineHeight:1.7}}>
-              แนะนำให้ backup ทุกสัปดาห์ เผื่อเปลี่ยนเครื่องหรือล้างเบราว์เซอร์
+            <div style={{fontWeight:800,fontSize:20,marginBottom:6}}>☁️ Backup ข้อมูล</div>
+            <div style={{fontSize:14,color:"#64748b",marginBottom:14}}>แนะนำให้ backup ทุกสัปดาห์</div>
+
+            {/* Test */}
+            <div style={{background:"#f0f9ff",borderRadius:14,padding:14,marginBottom:12}}>
+              <div style={{fontWeight:700,fontSize:16,color:"#0369a1",marginBottom:8}}>🔍 ทดสอบระบบ Backup</div>
+              <button onClick={testBackup} style={{...S.btnMain,background:"linear-gradient(135deg,#0369a1,#0284c7)",fontSize:17}}>
+                🔍 ทดสอบเชื่อมต่อ
+              </button>
+              {testResult&&!testResult.testing&&(
+                <div style={{marginTop:10,fontSize:14,lineHeight:2}}>
+                  <div style={{color:testResult.devOk?"#166534":"#991b1b"}}>{testResult.devOk?"✅":"❌"} Backup เครื่อง: {testResult.devOk?"ใช้ได้":"ไม่สำเร็จ"}</div>
+                  <div style={{color:testResult.sheetOk?"#166534":"#991b1b"}}>{testResult.sheetOk?"✅":"❌"} Google Sheets: {testResult.sheetOk?"ใช้ได้":"ไม่สำเร็จ — ตรวจสอบ Apps Script"}</div>
+                </div>
+              )}
             </div>
 
-            {/* Test Backup */}
-            <div style={{background:"#f0f9ff",borderRadius:14,padding:16,marginBottom:12}}>
-              <div style={{fontWeight:700,fontSize:17,color:"#0369a1",marginBottom:8}}>
-                🔍 ทดสอบระบบ Backup
-              </div>
-              <div style={{fontSize:15,color:"#64748b",marginBottom:10}}>
-                กดเพื่อตรวจสอบว่า Backup ในเครื่องและ Google Sheets ใช้งานได้
-              </div>
-              <button onClick={testBackup} style={{...S.btnMain,background:"linear-gradient(135deg,#0369a1,#0284c7)"}}>
-                🔍 ทดสอบระบบ Backup
+            {/* Device backup */}
+            <div style={{background:"#faf5ff",borderRadius:14,padding:14,marginBottom:12}}>
+              <div style={{fontWeight:700,fontSize:16,color:"#7c3aed",marginBottom:8}}>📥 บันทึกในเครื่อง (.json)</div>
+              <button onClick={exportBackup} style={{...S.btnMain,background:"linear-gradient(135deg,#7c3aed,#6d28d9)",fontSize:17}}>
+                📥 บันทึกไฟล์สำรอง
               </button>
+              {lastBackup&&<div style={{marginTop:8,fontSize:12,color:"#7c3aed",textAlign:"center"}}>🕐 Backup ล่าสุด: {lastBackup}</div>}
             </div>
 
-            {/* Step 1: Backup to device */}
-            <div style={{background:"#faf5ff",borderRadius:14,padding:16,marginBottom:12}}>
-              <div style={{fontWeight:700,fontSize:17,color:"#7c3aed",marginBottom:8}}>
-                📥 เก็บสำรองในเครื่อง (.json)
-              </div>
-              <div style={{fontSize:15,color:"#64748b",marginBottom:10}}>
-                บันทึกไฟล์ไว้ในเครื่อง ใช้กู้คืนได้ภายหลัง
-              </div>
-              <button onClick={exportBackup} style={{...S.btnMain,background:"linear-gradient(135deg,#7c3aed,#6d28d9)"}}>
-                📥 บันทึกไฟล์สำรองในเครื่อง
+            {/* Sheet backup */}
+            <div style={{background:"#f0fdf4",borderRadius:14,padding:14,marginBottom:12}}>
+              <div style={{fontWeight:700,fontSize:16,color:"#059669",marginBottom:8}}>☁️ อัปโหลดขึ้น Google Sheets ({records.length} รายการ)</div>
+              <button onClick={backupToSheet} disabled={syncing} style={{...S.btnMain,background:"linear-gradient(135deg,#059669,#047857)",fontSize:17}}>
+                {syncing?"⏳ กำลังอัปโหลด...":"☁️ อัปโหลดทั้งหมดขึ้น Sheets"}
               </button>
-            </div>
-
-            {/* Step 2: Upload to Google Sheets */}
-            <div style={{background:"#f0fdf4",borderRadius:14,padding:16,marginBottom:12}}>
-              <div style={{fontWeight:700,fontSize:17,color:"#059669",marginBottom:8}}>
-                ☁️ อัปโหลดขึ้น Google Sheets
-              </div>
-              <div style={{fontSize:15,color:"#64748b",marginBottom:10}}>
-                ส่งข้อมูลทั้งหมด {records.length} รายการขึ้น Cloud แสดงผลทุกขั้นตอน
-              </div>
-              <button onClick={backupToSheet} disabled={syncing} style={{...S.btnMain,background:"linear-gradient(135deg,#059669,#047857)"}}>
-                {syncing?"⏳ กำลังอัปโหลด...":"☁️ อัปโหลดขึ้น Google Sheets"}
-              </button>
+              {lastSheetSync&&<div style={{marginTop:8,fontSize:12,color:"#059669",textAlign:"center"}}>🕐 Sync ล่าสุด: {lastSheetSync}</div>}
             </div>
 
             {/* Import */}
-            <div style={{background:"#fff7ed",borderRadius:14,padding:16}}>
-              <div style={{fontWeight:700,fontSize:17,color:"#c2410c",marginBottom:8}}>📤 นำเข้าข้อมูล (Restore)</div>
-              <div style={{fontSize:15,color:"#64748b",marginBottom:10}}>นำไฟล์สำรองกลับมาเมื่อเปลี่ยนเครื่อง</div>
-              <label style={{...S.btnGhost,display:"block",cursor:"pointer",borderColor:"#c2410c",color:"#c2410c",border:"2px solid #c2410c",textAlign:"center",padding:"15px"}}>
-                📤 นำเข้าไฟล์สำรอง (.json)
+            <div style={{background:"#fff7ed",borderRadius:14,padding:14}}>
+              <div style={{fontWeight:700,fontSize:16,color:"#c2410c",marginBottom:8}}>📤 นำเข้าข้อมูล (Restore)</div>
+              <label style={{...S.btnGhost,display:"block",cursor:"pointer",borderColor:"#c2410c",color:"#c2410c",border:"2px solid #c2410c",borderRadius:12,padding:"15px",textAlign:"center",fontFamily:"Sarabun,sans-serif",fontSize:17,fontWeight:700}}>
+                📤 เลือกไฟล์สำรอง (.json)
                 <input type="file" accept=".json" onChange={importBackup} style={{display:"none"}}/>
               </label>
             </div>
           </div>
 
-          {/* Trial / Unlock */}
-          {!isUnlocked&&(
-            <div style={{...S.card,borderLeft:"5px solid #f59e0b",background:"#fffbeb"}}>
-              <div style={{fontWeight:800,fontSize:20,marginBottom:6,color:"#92400e"}}>⏳ ระยะทดลองใช้</div>
-              <div style={{fontSize:16,color:"#713f12",marginBottom:12}}>เหลืออีก <strong style={{fontSize:22,color:"#ef4444"}}>{trialLeft}</strong> วัน</div>
-              <button onClick={()=>setShowPaywall(true)} style={{...S.btnMain,background:"linear-gradient(135deg,#f59e0b,#d97706)"}}>🔓 อัปเกรด Full Version</button>
-            </div>
-          )}
-          {isUnlocked&&<div style={{...S.card,borderLeft:"5px solid #22c55e"}}><div style={{fontWeight:800,fontSize:20,color:"#166534"}}>✅ Full Version — ไม่จำกัดวัน</div></div>}
-
           {/* Google Sheets status */}
           <div style={{...S.card,borderLeft:"5px solid #22c55e"}}>
             <div style={{fontWeight:800,fontSize:18,marginBottom:4,color:"#166534"}}>✅ Google Sheets เชื่อมต่อแล้ว</div>
-            <div style={{fontSize:15,color:"#475569",lineHeight:1.7}}>บันทึกแต่ละครั้ง และ backup ด้านบน จะซิงค์ขึ้น sheet อัตโนมัติ</div>
+            <div style={{fontSize:15,color:"#475569",lineHeight:1.7}}>บันทึกแต่ละครั้งซิงค์อัตโนมัติ · Admin ดูข้อมูลทุกคนได้ใน sheet "BP_Records"</div>
           </div>
 
           {/* Version */}
@@ -902,20 +1002,20 @@ export default function App() {
               <div>
                 <div style={{fontWeight:800,fontSize:18}}>🏷️ เวอร์ชัน {APP_VERSION}</div>
                 <div style={{fontSize:15,color:"#64748b",marginTop:4}}>อัปเดต {BUILD_DATE}</div>
-                <div style={{fontSize:13,color:"#94a3b8",marginTop:2}}>แตะ version ที่ header 5 ครั้ง = Admin Panel</div>
+                <div style={{fontSize:13,color:"#94a3b8",marginTop:2}}>แตะ version ที่ header 5 ครั้ง = Admin</div>
               </div>
             </div>
           </div>
 
-          {/* Danger Zone — ซ่อนไว้ */}
+          {/* Hidden danger zone */}
           <div style={S.card}>
-            <button onClick={()=>setShowDeleteZone(v=>!v)} style={{width:"100%",background:"none",border:"none",cursor:"pointer",textAlign:"left",fontFamily:"Sarabun,sans-serif",fontSize:16,color:"#94a3b8",padding:0}}>
-              {showDeleteZone?"▲ ซ่อน":"▼ แสดงตัวเลือกขั้นสูง"}
+            <button onClick={()=>setShowDeleteZone(v=>!v)} style={{width:"100%",background:"none",border:"none",cursor:"pointer",textAlign:"left",fontFamily:"Sarabun,sans-serif",fontSize:15,color:"#94a3b8",padding:0}}>
+              {showDeleteZone?"▲ ซ่อนตัวเลือกขั้นสูง":"▼ แสดงตัวเลือกขั้นสูง"}
             </button>
             {showDeleteZone&&(
-              <div style={{marginTop:16,borderTop:"2px dashed #fee2e2",paddingTop:14}}>
-                <div style={{fontWeight:800,fontSize:18,marginBottom:8,color:"#ef4444"}}>⚠️ ล้างข้อมูลทั้งหมด</div>
-                <div style={{fontSize:15,color:"#64748b",marginBottom:12}}>⚠️ กรุณา backup ก่อนลบ — ไม่สามารถกู้คืนได้</div>
+              <div style={{marginTop:14,borderTop:"2px dashed #fee2e2",paddingTop:14}}>
+                <div style={{fontWeight:800,fontSize:18,marginBottom:6,color:"#ef4444"}}>⚠️ ล้างข้อมูลทั้งหมด</div>
+                <div style={{fontSize:14,color:"#64748b",marginBottom:12}}>⚠️ กรุณา backup ก่อน — ไม่สามารถกู้คืนได้</div>
                 <button onClick={()=>{if(window.confirm("ยืนยันลบข้อมูลทั้งหมด? ไม่สามารถกู้คืนได้")){setRecords([]);lsSet(KEY_RECORDS,[]);toast$("ล้างข้อมูลแล้ว");}}} style={{width:"100%",padding:15,borderRadius:12,border:"2px solid #ef4444",background:"white",color:"#ef4444",fontSize:18,fontWeight:700,fontFamily:"Sarabun,sans-serif",cursor:"pointer"}}>
                   🗑️ ลบข้อมูลทั้งหมด
                 </button>
