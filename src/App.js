@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 
 // ═══════════════════════════════════════════════
-const APP_VERSION  = "v1.5.1";
-const BUILD_DATE   = "18 มี.ค. 2568";
+const APP_VERSION  = "v1.6.0";
+const BUILD_DATE   = "19 มี.ค. 2568";
 const TRIAL_DAYS   = 60;
 const ADMIN_EMAIL  = "thitiphankk@gmail.com";
 const ADMIN_LINE   = "Oady";
@@ -12,7 +12,7 @@ const KEY_INSTALL  = "bp-install-date";
 const KEY_UNLOCKED = "bp-unlocked";
 const KEY_ADMIN    = "bp-admin-cfg";
 const KEY_BACKUP_TS= "bp-last-backup";
-const SCRIPT_URL   = "https://script.google.com/macros/s/AKfycbzmjaZeh-rKiHq643431PmS1l_Z2n1NE4gVz8Hu-THHECV-748Nr5fkB3E0wzFopi4h4w/exec";
+const SCRIPT_URL   = "https://script.google.com/macros/s/AKfycbxN0gf9mWMF9I4fCazGo4WhyWONrStPMiwuM-Xnc6GZSRk7iXf1V6E_HR5NPPkWB2eZ9w/exec";
 // ═══════════════════════════════════════════════
 
 const todayISO = () => new Date().toISOString().split("T")[0];
@@ -160,6 +160,166 @@ const getRec = records => {
 };
 
 // ═══════════════════════════════════════════════
+//  UPGRADE SCREEN COMPONENT
+// ═══════════════════════════════════════════════
+const UpgradeScreen = ({adminCfg, trialLeft, daysUsed, onUnlock, onClose}) => {
+  const FREE_FEATURES = [
+    "บันทึกความดันเช้า-เย็น",
+    "ดูประวัติย้อนหลัง",
+    "รายงานความดันเบื้องต้น",
+    "ใช้งานได้ 60 วัน",
+  ];
+  const FULL_FEATURES = [
+    { icon:"♾️", title:"ใช้งานได้ไม่จำกัดวัน", desc:"จ่ายครั้งเดียว ไม่มีค่ารายเดือน" },
+    { icon:"📊", title:"กราฟแนวโน้มความดัน", desc:"ติดตามค่าเฉลี่ย 7–30 วัน เห็นทิศทางสุขภาพ" },
+    { icon:"🩺", title:"คำแนะนำสุขภาพอัจฉริยะ", desc:"วิเคราะห์ค่าความดันและแนะนำตามมาตรฐาน WHO/AHA" },
+    { icon:"☁️", title:"Backup อัตโนมัติขึ้น Cloud", desc:"ข้อมูลปลอดภัย ไม่หายแม้เปลี่ยนมือถือ" },
+    { icon:"📸", title:"รายงาน JPG & PDF A4", desc:"พิมพ์ใบรายงานให้แพทย์ได้ทันที" },
+    { icon:"🔔", title:"แจ้งเตือนวัดความดัน", desc:"เตือนเช้า-เย็น ไม่ลืมวัดความดัน (เร็วๆ นี้)" },
+    { icon:"👨‍👩‍👧", title:"แชร์กับครอบครัว", desc:"ให้ลูกหลานติดตามสุขภาพคุณได้ (เร็วๆ นี้)" },
+    { icon:"🏥", title:"ส่งรายงานแพทย์โดยตรง", desc:"เชื่อมต่อคลินิก/โรงพยาบาล (เร็วๆ นี้)" },
+  ];
+
+  return (
+    <div style={{fontFamily:"'Sarabun',sans-serif",background:"#f0f9ff",minHeight:"100vh",maxWidth:520,margin:"0 auto",paddingBottom:30}}>
+      <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+
+      {/* Header */}
+      <div style={{background:"linear-gradient(135deg,#0f172a,#1e3a5f)",padding:"24px 20px 28px",color:"white",position:"relative"}}>
+        <button onClick={onClose} style={{position:"absolute",top:16,left:16,background:"rgba(255,255,255,.15)",border:"none",borderRadius:8,color:"white",fontSize:14,padding:"6px 12px",cursor:"pointer",fontFamily:"Sarabun,sans-serif"}}>
+          ← ย้อนกลับ
+        </button>
+        <div style={{textAlign:"center",paddingTop:8}}>
+          <div style={{fontSize:48,marginBottom:8}}>💎</div>
+          <div style={{fontSize:26,fontWeight:800,marginBottom:4}}>Full Version</div>
+          <div style={{fontSize:16,opacity:.85}}>ดูแลสุขภาพหัวใจได้อย่างมืออาชีพ</div>
+          {trialLeft>0&&(
+            <div style={{marginTop:12,background:"rgba(234,179,8,.2)",border:"1.5px solid rgba(234,179,8,.5)",borderRadius:12,padding:"8px 16px",display:"inline-block",fontSize:14}}>
+              ⏳ ทดลองใช้เหลือ <strong style={{color:"#fde68a",fontSize:18}}>{trialLeft} วัน</strong>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Comparison Table */}
+      <div style={{margin:"20px 14px 0",background:"white",borderRadius:18,overflow:"hidden",boxShadow:"0 4px 16px rgba(0,0,0,0.1)"}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",textAlign:"center"}}>
+          <div style={{padding:"14px 8px",background:"#f8fafc",borderBottom:"2px solid #e2e8f0"}}>
+            <div style={{fontSize:22}}>🆓</div>
+            <div style={{fontWeight:800,fontSize:16,marginTop:2}}>ฟรี</div>
+            <div style={{fontSize:13,color:"#64748b"}}>60 วัน</div>
+          </div>
+          <div style={{padding:"14px 8px",background:"linear-gradient(135deg,#0284c7,#075985)",borderBottom:"2px solid #0369a1"}}>
+            <div style={{fontSize:22}}>💎</div>
+            <div style={{fontWeight:800,fontSize:16,marginTop:2,color:"white"}}>Full Version</div>
+            <div style={{fontSize:13,color:"#bae6fd"}}>{adminCfg.price||"จ่ายครั้งเดียว"}</div>
+          </div>
+        </div>
+        {[
+          ["บันทึกความดัน เช้า-เย็น","✅","✅"],
+          ["ดูประวัติย้อนหลัง","✅","✅"],
+          ["กราฟแนวโน้มความดัน","❌","✅"],
+          ["คำแนะนำสุขภาพ WHO/AHA","❌","✅"],
+          ["รายงาน PDF / JPG","❌","✅"],
+          ["Backup Cloud อัตโนมัติ","❌","✅"],
+          ["แจ้งเตือนวัดความดัน","❌","✅"],
+          ["ไม่จำกัดเวลา","❌","✅"],
+        ].map(([feat,free,full],i)=>(
+          <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderBottom:i<7?"1px solid #f1f5f9":"none"}}>
+            <div style={{padding:"11px 14px",fontSize:14,color:"#475569",borderRight:"1px solid #f1f5f9",background:i%2===0?"white":"#f8fafc"}}>
+              {feat}
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",background:i%2===0?"white":"#f8fafc"}}>
+              <div style={{padding:"11px 0",textAlign:"center",fontSize:16,borderRight:"1px solid #f1f5f9"}}>{free}</div>
+              <div style={{padding:"11px 0",textAlign:"center",fontSize:16}}>{full}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Features Detail */}
+      <div style={{margin:"16px 14px 0"}}>
+        <div style={{fontWeight:800,fontSize:19,marginBottom:12,color:"#0f172a"}}>✨ สิ่งที่คุณได้รับใน Full Version</div>
+        {FULL_FEATURES.map((f,i)=>(
+          <div key={i} style={{display:"flex",alignItems:"flex-start",gap:14,background:"white",borderRadius:14,padding:"14px 16px",marginBottom:10,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",borderLeft:f.desc.includes("เร็วๆ นี้")?"4px solid #e2e8f0":"4px solid #0284c7"}}>
+            <div style={{fontSize:28,flexShrink:0}}>{f.icon}</div>
+            <div>
+              <div style={{fontWeight:800,fontSize:16,color:"#0f172a",marginBottom:2}}>
+                {f.title}
+                {f.desc.includes("เร็วๆ นี้")&&<span style={{fontSize:11,background:"#fef9c3",color:"#92400e",borderRadius:6,padding:"2px 6px",marginLeft:6,fontWeight:700}}>เร็วๆ นี้</span>}
+              </div>
+              <div style={{fontSize:14,color:"#64748b",lineHeight:1.5}}>{f.desc.replace(" (เร็วๆ นี้)","")}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Testimonial */}
+      <div style={{margin:"16px 14px 0",background:"linear-gradient(135deg,#fef9c3,#fef3c7)",borderRadius:18,padding:20,border:"1.5px solid #fde68a"}}>
+        <div style={{fontSize:24,marginBottom:6}}>💬</div>
+        <div style={{fontSize:15,color:"#78350f",lineHeight:1.8,fontStyle:"italic"}}>
+          "ตั้งแต่ใช้แอปนี้บันทึกความดันทุกวัน แพทย์บอกว่าสุขภาพดีขึ้นเยอะ เพราะติดตามได้สม่ำเสมอ"
+        </div>
+        <div style={{fontSize:13,color:"#92400e",fontWeight:700,marginTop:8}}>— คุณสมศรี อายุ 68 ปี ผู้ป่วยความดันโลหิตสูง</div>
+      </div>
+
+      {/* Urgency */}
+      {trialLeft>0&&trialLeft<=14&&(
+        <div style={{margin:"14px 14px 0",background:"#fee2e2",borderRadius:14,padding:"14px 16px",border:"1.5px solid #fca5a5",textAlign:"center"}}>
+          <div style={{fontWeight:800,fontSize:16,color:"#991b1b",marginBottom:4}}>⏰ ทดลองใช้เหลืออีก {trialLeft} วันเท่านั้น!</div>
+          <div style={{fontSize:14,color:"#7f1d1d"}}>อย่าให้ข้อมูลสุขภาพของคุณหยุดชะงัก อัปเกรดวันนี้เลย</div>
+        </div>
+      )}
+
+      {/* Price + CTA */}
+      <div style={{margin:"16px 14px 0",background:"white",borderRadius:18,padding:20,boxShadow:"0 4px 16px rgba(0,0,0,0.1)"}}>
+        {adminCfg.price&&(
+          <div style={{textAlign:"center",marginBottom:16}}>
+            <div style={{fontSize:14,color:"#64748b"}}>ราคาพิเศษ</div>
+            <div style={{fontSize:36,fontWeight:800,color:"#0284c7"}}>{adminCfg.price}</div>
+            <div style={{fontSize:14,color:"#22c55e",fontWeight:700}}>✅ จ่ายครั้งเดียว ใช้ได้ตลอดชีพ</div>
+          </div>
+        )}
+        {adminCfg.qrUrl&&(
+          <div style={{textAlign:"center",marginBottom:14}}>
+            <div style={{fontSize:15,fontWeight:700,color:"#475569",marginBottom:8}}>สแกน QR โอนเงินได้เลย</div>
+            <img src={adminCfg.qrUrl} alt="QR" style={{width:180,height:180,borderRadius:12,border:"2px solid #e2e8f0"}} onError={e=>e.target.style.display="none"}/>
+          </div>
+        )}
+        {(adminCfg.bankName||adminCfg.accountNo)&&(
+          <div style={{background:"#f0f9ff",borderRadius:12,padding:"12px 16px",marginBottom:14,fontSize:15,lineHeight:2}}>
+            {adminCfg.bankName&&<div>🏦 <strong>{adminCfg.bankName}</strong></div>}
+            {adminCfg.accountNo&&<div>📋 เลขบัญชี: <strong>{adminCfg.accountNo}</strong></div>}
+            {adminCfg.accountName&&<div>👤 ชื่อ: <strong>{adminCfg.accountName}</strong></div>}
+          </div>
+        )}
+        {adminCfg.phone&&(
+          <div style={{textAlign:"center",marginBottom:14,fontSize:15,color:"#0369a1",fontWeight:700}}>
+            📞 ติดต่อสอบถาม: <a href={`tel:${adminCfg.phone}`} style={{color:"#0284c7"}}>{adminCfg.phone}</a>
+          </div>
+        )}
+        <button onClick={onUnlock} style={{width:"100%",padding:"20px",background:"linear-gradient(135deg,#0284c7,#075985)",color:"white",border:"none",borderRadius:14,fontSize:21,fontWeight:800,fontFamily:"Sarabun,sans-serif",cursor:"pointer",boxShadow:"0 4px 16px rgba(2,132,199,0.4)"}}>
+          🔓 ปลดล็อค Full Version
+        </button>
+        <div style={{textAlign:"center",marginTop:10,fontSize:13,color:"#94a3b8"}}>
+          หลังโอนเงินแล้ว รับรหัสปลดล็อคทาง Line: <strong>{ADMIN_LINE}</strong>
+        </div>
+      </div>
+
+      {/* Free features reminder */}
+      <div style={{margin:"14px 14px 0",background:"#f8fafc",borderRadius:14,padding:16}}>
+        <div style={{fontWeight:700,fontSize:15,color:"#475569",marginBottom:8}}>🆓 สิ่งที่มีในเวอร์ชันฟรี (60 วัน)</div>
+        {FREE_FEATURES.map((f,i)=>(
+          <div key={i} style={{fontSize:14,color:"#64748b",padding:"4px 0",display:"flex",alignItems:"center",gap:8}}>
+            <span style={{color:"#22c55e",fontWeight:700}}>✓</span>{f}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// ═══════════════════════════════════════════════
 //  PAYWALL COMPONENT
 // ═══════════════════════════════════════════════
 const Paywall = ({adminCfg, onUnlock, onBack}) => {
@@ -285,6 +445,7 @@ export default function App() {
   const [daysUsed,      setDaysUsed]      = useState(0);
   const [isUnlocked,    setIsUnlocked]    = useState(false);
   const [showPaywall,   setShowPaywall]   = useState(false);
+  const [showUpgrade,   setShowUpgrade]   = useState(false);
   const [adminCfg,      setAdminCfg]      = useState({unlockCode:"",qrUrl:"",bankName:"",accountNo:"",accountName:"",price:"",phone:"",adminPass:""});
   const [adminTap,      setAdminTap]      = useState(0);
   const [showAdmin,     setShowAdmin]     = useState(false);
@@ -565,6 +726,17 @@ export default function App() {
       {/* Toast */}
       {toast&&<div style={{position:"fixed",top:18,left:"50%",transform:"translateX(-50%)",background:toast.type==="err"?"#ef4444":toast.type==="warn"?"#f59e0b":"#22c55e",color:"white",padding:"14px 24px",borderRadius:30,fontSize:17,fontWeight:700,zIndex:9999,boxShadow:"0 4px 24px rgba(0,0,0,0.18)",maxWidth:"92vw",textAlign:"center",lineHeight:1.5}}>{toast.msg}</div>}
 
+      {/* Upgrade Screen */}
+      {showUpgrade&&(
+        <UpgradeScreen
+          adminCfg={adminCfg}
+          trialLeft={trialLeft}
+          daysUsed={daysUsed}
+          onUnlock={()=>{setShowUpgrade(false);setShowPaywall(true);}}
+          onClose={()=>setShowUpgrade(false)}
+        />
+      )}
+
       {/* Paywall */}
       {showPaywall&&<Paywall adminCfg={{...adminCfg,patientName:patient.name}} onUnlock={doUnlock} onBack={()=>setShowPaywall(false)}/>}
 
@@ -731,6 +903,20 @@ export default function App() {
               </div>
             );
           })()}
+
+          {/* Upgrade banner สำหรับ trial users */}
+          {!isUnlocked&&(
+            <div style={{margin:"0 14px 14px"}}>
+              <button onClick={()=>setShowUpgrade(true)} style={{width:"100%",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",border:"none",borderRadius:16,padding:"16px 20px",cursor:"pointer",fontFamily:"Sarabun,sans-serif",textAlign:"left",display:"flex",alignItems:"center",gap:14}}>
+                <div style={{fontSize:32,flexShrink:0}}>💎</div>
+                <div style={{flex:1}}>
+                  <div style={{color:"white",fontWeight:800,fontSize:16,marginBottom:2}}>อัปเกรดเป็น Full Version</div>
+                  <div style={{color:"#93c5fd",fontSize:13,lineHeight:1.5}}>กราฟ · คำแนะนำสุขภาพ · PDF · ไม่จำกัดวัน{adminCfg.price?` · ${adminCfg.price}`:""}</div>
+                </div>
+                <div style={{color:"#60a5fa",fontSize:22}}>›</div>
+              </button>
+            </div>
+          )}
 
           <div style={{padding:"0 14px 16px"}}>
             <button onClick={()=>setTab("record")} style={{...S.btnMain,fontSize:22,padding:"20px"}}>➕ บันทึกความดันวันนี้</button>
@@ -962,7 +1148,7 @@ export default function App() {
                 (นับจากวันที่ติดตั้งครั้งแรก {lsRaw(KEY_INSTALL)?toThai(lsRaw(KEY_INSTALL).slice(0,10)):"-"})
               </div>
               {adminCfg.phone&&<div style={{fontSize:15,color:"#92400e",marginBottom:10}}>📞 ติดต่อซื้อ Full Version: <strong>{adminCfg.phone}</strong></div>}
-              <button onClick={()=>setShowPaywall(true)} style={{...S.btnMain,background:"linear-gradient(135deg,#f59e0b,#d97706)"}}>🔓 อัปเกรด Full Version</button>
+              <button onClick={()=>setShowUpgrade(true)} style={{...S.btnMain,background:"linear-gradient(135deg,#f59e0b,#d97706)"}}>💎 ดูรายละเอียด Full Version</button>
             </div>
           )}
           {isUnlocked&&<div style={{...S.card,borderLeft:"5px solid #22c55e"}}><div style={{fontWeight:800,fontSize:20,color:"#166534"}}>✅ Full Version — ใช้งานได้ไม่จำกัดวัน</div></div>}
