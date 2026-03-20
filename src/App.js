@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 
 // ═══════════════════════════════════════════════
-const APP_VERSION  = "v1.6.2";
+const APP_VERSION  = "v1.6.3";
 const BUILD_DATE   = "20 มี.ค. 2568";
 const TRIAL_DAYS   = 60;
 const ADMIN_EMAIL  = "thitiphankk@gmail.com";
@@ -64,7 +64,7 @@ const notifyAdmin = async (patientName, phone, isTest=false) => {
       timestamp:   new Date().toLocaleString("th-TH"),
       appVersion:  APP_VERSION,
     }));
-    const res = await fetch(SCRIPT_URL, { method:"POST", mode:"no-cors", body:fd });
+    await fetch(SCRIPT_URL, { method:"POST", mode:"no-cors", body:fd });
     return { ok: true };
   } catch(e) {
     return { ok: false, err: e.message };
@@ -942,7 +942,8 @@ export default function App() {
                 <Input label="URL รูป QR Code" value={adminCfg.qrUrl||""} onChange={v=>setAdminCfg(c=>({...c,qrUrl:v}))} placeholder="https://..."/>
                 <div style={{background:"#fffbeb",borderRadius:12,padding:12,fontSize:13,color:"#713f12",lineHeight:1.7}}>
                   💡 รหัสปลดล็อคและรหัส Admin ตั้งที่ Vercel → Environment Variables<br/>
-                  UNLOCK_CODE และ ADMIN_PASS
+                  UNLOCK_CODE และ ADMIN_PASS<br/>
+                  📱 LINE: ใช้ Messaging API (LINE Notify ยกเลิกแล้ว 31 มี.ค. 68)
                 </div>
                 <div style={{display:"flex",gap:10}}>
                   <button onClick={()=>{setShowAdmin(false);setAdminAuth(false);setAdminPass("");}} style={S.btnGhost}>ปิด</button>
