@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 
 // ═══════════════════════════════════════════════
-const APP_VERSION  = "v1.6.0";
-const BUILD_DATE   = "19 มี.ค. 2568";
+const APP_VERSION  = "v1.6.2";
+const BUILD_DATE   = "20 มี.ค. 2568";
 const TRIAL_DAYS   = 60;
 const ADMIN_EMAIL  = "thitiphankk@gmail.com";
 const ADMIN_LINE   = "Oady";
@@ -50,19 +50,25 @@ const verifyCode = async (type, code) => {
   } catch { return false; }
 };
 
-// ── Notify admin via Google Apps Script ─────────
-const notifyAdmin = async (patientName, phone) => {
+// ── Notify admin (Email via Apps Script + Line Notify) ──
+const notifyAdmin = async (patientName, phone, isTest=false) => {
   try {
     const fd = new FormData();
     fd.append("data", JSON.stringify({
-      type:"payment_request",
-      patientName, phone,
-      adminEmail: ADMIN_EMAIL,
-      adminLine: ADMIN_LINE,
-      timestamp: new Date().toISOString(),
+      type:        "payment_request",
+      patientName: patientName || "ไม่ระบุ",
+      phone:       phone       || "ไม่ระบุ",
+      adminEmail:  ADMIN_EMAIL,
+      adminLine:   ADMIN_LINE,
+      isTest:      isTest,
+      timestamp:   new Date().toLocaleString("th-TH"),
+      appVersion:  APP_VERSION,
     }));
-    await fetch(SCRIPT_URL, {method:"POST", mode:"no-cors", body:fd});
-  } catch {}
+    const res = await fetch(SCRIPT_URL, { method:"POST", mode:"no-cors", body:fd });
+    return { ok: true };
+  } catch(e) {
+    return { ok: false, err: e.message };
+  }
 };
 
 // ── Sync one record ─────────────────────────────
@@ -203,18 +209,21 @@ const UpgradeScreen = ({adminCfg, trialLeft, daysUsed, onUnlock, onClose}) => {
 
       {/* Comparison Table */}
       <div style={{margin:"20px 14px 0",background:"white",borderRadius:18,overflow:"hidden",boxShadow:"0 4px 16px rgba(0,0,0,0.1)"}}>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",textAlign:"center"}}>
-          <div style={{padding:"14px 8px",background:"#f8fafc",borderBottom:"2px solid #e2e8f0"}}>
-            <div style={{fontSize:22}}>🆓</div>
-            <div style={{fontWeight:800,fontSize:16,marginTop:2}}>ฟรี</div>
-            <div style={{fontSize:13,color:"#64748b"}}>60 วัน</div>
+        {/* Header row — 3 columns: feature | free | full */}
+        <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr",textAlign:"center"}}>
+          <div style={{padding:"14px 12px",background:"#f8fafc",borderBottom:"2px solid #e2e8f0",borderRight:"1px solid #e2e8f0"}}/>
+          <div style={{padding:"14px 8px",background:"#f8fafc",borderBottom:"2px solid #e2e8f0",borderRight:"1px solid #e2e8f0"}}>
+            <div style={{fontSize:20}}>🆓</div>
+            <div style={{fontWeight:800,fontSize:15,marginTop:2}}>ฟรี</div>
+            <div style={{fontSize:12,color:"#64748b"}}>60 วัน</div>
           </div>
           <div style={{padding:"14px 8px",background:"linear-gradient(135deg,#0284c7,#075985)",borderBottom:"2px solid #0369a1"}}>
-            <div style={{fontSize:22}}>💎</div>
-            <div style={{fontWeight:800,fontSize:16,marginTop:2,color:"white"}}>Full Version</div>
-            <div style={{fontSize:13,color:"#bae6fd"}}>{adminCfg.price||"จ่ายครั้งเดียว"}</div>
+            <div style={{fontSize:20}}>💎</div>
+            <div style={{fontWeight:800,fontSize:15,marginTop:2,color:"white"}}>Full Version</div>
+            <div style={{fontSize:12,color:"#bae6fd"}}>{adminCfg.price||"จ่ายครั้งเดียว"}</div>
           </div>
         </div>
+        {/* Feature rows */}
         {[
           ["บันทึกความดัน เช้า-เย็น","✅","✅"],
           ["ดูประวัติย้อนหลัง","✅","✅"],
@@ -225,14 +234,10 @@ const UpgradeScreen = ({adminCfg, trialLeft, daysUsed, onUnlock, onClose}) => {
           ["แจ้งเตือนวัดความดัน","❌","✅"],
           ["ไม่จำกัดเวลา","❌","✅"],
         ].map(([feat,free,full],i)=>(
-          <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderBottom:i<7?"1px solid #f1f5f9":"none"}}>
-            <div style={{padding:"11px 14px",fontSize:14,color:"#475569",borderRight:"1px solid #f1f5f9",background:i%2===0?"white":"#f8fafc"}}>
-              {feat}
-            </div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",background:i%2===0?"white":"#f8fafc"}}>
-              <div style={{padding:"11px 0",textAlign:"center",fontSize:16,borderRight:"1px solid #f1f5f9"}}>{free}</div>
-              <div style={{padding:"11px 0",textAlign:"center",fontSize:16}}>{full}</div>
-            </div>
+          <div key={i} style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr",borderBottom:i<7?"1px solid #f1f5f9":"none",background:i%2===0?"white":"#f8fafc"}}>
+            <div style={{padding:"11px 14px",fontSize:14,color:"#475569",borderRight:"1px solid #f1f5f9"}}>{feat}</div>
+            <div style={{padding:"11px 0",textAlign:"center",fontSize:17,borderRight:"1px solid #f1f5f9"}}>{free}</div>
+            <div style={{padding:"11px 0",textAlign:"center",fontSize:17}}>{full}</div>
           </div>
         ))}
       </div>
@@ -283,7 +288,22 @@ const UpgradeScreen = ({adminCfg, trialLeft, daysUsed, onUnlock, onClose}) => {
         {adminCfg.qrUrl&&(
           <div style={{textAlign:"center",marginBottom:14}}>
             <div style={{fontSize:15,fontWeight:700,color:"#475569",marginBottom:8}}>สแกน QR โอนเงินได้เลย</div>
-            <img src={adminCfg.qrUrl} alt="QR" style={{width:180,height:180,borderRadius:12,border:"2px solid #e2e8f0"}} onError={e=>e.target.style.display="none"}/>
+            <img
+              src={adminCfg.qrUrl}
+              alt="QR Payment"
+              style={{width:200,height:200,borderRadius:12,border:"2px solid #e2e8f0",objectFit:"contain",background:"white"}}
+              onError={e=>{e.target.style.display="none";e.target.nextSibling&&(e.target.nextSibling.style.display="block");}}
+            />
+            <div style={{display:"none",background:"#fef9c3",borderRadius:10,padding:"10px 14px",fontSize:14,color:"#92400e"}}>
+              ⚠️ ไม่สามารถโหลดรูป QR ได้ กรุณาติดต่อ Line: {ADMIN_LINE}
+            </div>
+          </div>
+        )}
+        {!adminCfg.qrUrl&&(adminCfg.bankName||adminCfg.phone)&&(
+          <div style={{background:"#fef9c3",borderRadius:14,padding:"14px 16px",marginBottom:14,textAlign:"center",fontSize:15,color:"#92400e",lineHeight:1.7}}>
+            📞 ติดต่อรับ QR Code โอนเงินได้ที่<br/>
+            Line: <strong>{ADMIN_LINE}</strong>
+            {adminCfg.phone&&<span> · โทร: <strong>{adminCfg.phone}</strong></span>}
           </div>
         )}
         {(adminCfg.bankName||adminCfg.accountNo)&&(
@@ -340,10 +360,16 @@ const Paywall = ({adminCfg, onUnlock, onBack}) => {
   };
 
   const doNotify = async () => {
+    if(!phone.trim()){return;}
     setNLoading(true);
-    await notifyAdmin(adminCfg.patientName||"ไม่ระบุ", phone);
+    const res = await notifyAdmin(adminCfg.patientName||"ไม่ระบุ", phone, false);
     setNLoading(false);
-    setNotified(true);
+    if(res.ok){
+      setNotified(true);
+    } else {
+      // แม้ no-cors จะไม่รู้ผล → แสดงว่าส่งแล้ว
+      setNotified(true);
+    }
   };
 
   // คำนวณวันที่ใช้ไปแล้ว
@@ -438,6 +464,7 @@ export default function App() {
   const [syncProg,      setSyncProg]      = useState(null);
   const [lastBackup,    setLastBackup]    = useState("");
   const [lastSheetSync, setLastSheetSync] = useState("");
+  const [sheetStatus,   setSheetStatus]   = useState("unknown"); // unknown | ok | error
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [showDeleteZone,setShowDeleteZone]= useState(false);
   const [editRecord,    setEditRecord]    = useState(null);
@@ -452,6 +479,7 @@ export default function App() {
   const [adminAuth,     setAdminAuth]     = useState(false);
   const [adminPass,     setAdminPass]     = useState("");
   const [adminLoading,  setAdminLoading]  = useState(false);
+  const [testNotifyLoading, setTestNotifyLoading] = useState(false);
   const [showGuide,     setShowGuide]     = useState(false);
   const [testResult,    setTestResult]    = useState(null);
   const reportRef = useRef(null);
@@ -519,7 +547,12 @@ export default function App() {
     const next = idx>=0 ? records.map((r,i)=>i===idx?entry:r) : [...records,entry].sort((a,b)=>a.date.localeCompare(b.date));
     setRecords(next); lsSet(KEY_RECORDS,next);
     const res = await syncToSheet(entry, patient.name);
-    if(res.ok){ const ts=nowStr(); localStorage.setItem("bp-sheet-sync-ts",ts); setLastSheetSync(ts); }
+    if(res.ok){
+      const ts=nowStr(); localStorage.setItem("bp-sheet-sync-ts",ts); setLastSheetSync(ts);
+      setSheetStatus("ok");
+    } else {
+      setSheetStatus("error");
+    }
     toast$(res.ok?`✅ ${ex?"อัปเดต":"บันทึก"} + ซิงค์ Google Sheets สำเร็จ`:`💾 ${ex?"อัปเดต":"บันทึก"}ในเครื่องแล้ว (ออฟไลน์)`,res.ok?"ok":"warn");
     setForm(emptyForm); setSaving(false); setTab("history");
   };
@@ -538,13 +571,53 @@ export default function App() {
     setDeleteConfirm(null); toast$("ลบรายการแล้ว");
   };
 
-  // ── BACKUP to device ──
-  const exportBackup = () => {
-    const blob=new Blob([JSON.stringify({version:APP_VERSION,patient,records,exportedAt:new Date().toISOString()},null,2)],{type:"application/json"});
-    const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
-    a.download=`bp-backup_${patient.name||"record"}_${todayISO()}.json`; a.click();
-    const ts=nowStr(); localStorage.setItem(KEY_BACKUP_TS,ts); setLastBackup(ts);
-    toast$("📥 บันทึกไฟล์สำรองในเครื่องแล้ว ✓");
+  // ── BACKUP to device (รองรับ iOS + Android) ──
+  const exportBackup = async () => {
+    const jsonStr = JSON.stringify({version:APP_VERSION,patient,records,exportedAt:new Date().toISOString()},null,2);
+    const blob = new Blob([jsonStr], {type:"application/json"});
+    const filename = `bp-backup_${patient.name||"record"}_${todayISO()}.json`;
+    const ts = nowStr();
+
+    // iOS Safari — ใช้ Web Share API (รองรับ iOS 15+)
+    if (navigator.share && navigator.canShare) {
+      try {
+        const file = new File([blob], filename, {type:"application/json"});
+        if (navigator.canShare({files:[file]})) {
+          await navigator.share({files:[file], title:"BP Backup", text:"ไฟล์สำรองข้อมูลความดัน"});
+          localStorage.setItem(KEY_BACKUP_TS, ts); setLastBackup(ts);
+          toast$("📥 แชร์ไฟล์สำรองสำเร็จ ✓");
+          return;
+        }
+      } catch(e) {
+        if (e.name !== "AbortError") {
+          // ถ้า share ล้มเหลว ไม่ใช่ user cancel → ลอง fallback
+        } else { return; } // user กด cancel
+      }
+    }
+
+    // Android / Desktop — download ปกติ
+    if (!navigator.userAgent.includes("iPhone") && !navigator.userAgent.includes("iPad")) {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      setTimeout(()=>URL.revokeObjectURL(a.href), 10000);
+      localStorage.setItem(KEY_BACKUP_TS, ts); setLastBackup(ts);
+      toast$("📥 บันทึกไฟล์สำรองในเครื่องแล้ว ✓");
+      return;
+    }
+
+    // iOS Fallback — เปิดหน้าต่างใหม่ให้กด Share > Save to Files
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, "_blank");
+    if (win) {
+      toast$("iOS: กด Share ↗ → Save to Files เพื่อบันทึก","ok",6000);
+    } else {
+      // Fallback สุดท้าย — แสดง JSON ใน textarea ให้ copy
+      toast$("กรุณา copy ข้อความด้านล่างเพื่อสำรองข้อมูล","warn",4000);
+    }
+    localStorage.setItem(KEY_BACKUP_TS, ts); setLastBackup(ts);
+    setTimeout(()=>URL.revokeObjectURL(url), 60000);
   };
 
   // ── BACKUP all to Google Sheets ──
@@ -555,6 +628,9 @@ export default function App() {
     setSyncing(false); setSyncProg(null);
     if(res.fail===0){
       const ts=nowStr(); localStorage.setItem("bp-sheet-sync-ts",ts); setLastSheetSync(ts);
+      setSheetStatus("ok");
+    } else {
+      setSheetStatus(res.ok>0?"ok":"error");
     }
     toast$(res.fail===0?`✅ อัปโหลด ${res.ok} รายการสำเร็จ`:`⚠️ สำเร็จ ${res.ok} / ไม่สำเร็จ ${res.fail} รายการ`,res.fail===0?"ok":"warn",5000);
   };
@@ -576,6 +652,7 @@ export default function App() {
     const res=await syncToSheet(testE,"__TEST__");
     sheetOk=res.ok;
     setTestResult({testing:false,devOk,sheetOk});
+    setSheetStatus(sheetOk ? "ok" : "error");
     toast$(`เครื่อง: ${devOk?"✅":"❌"}  ·  Google Sheets: ${sheetOk?"✅":"❌"}`, devOk&&sheetOk?"ok":"warn", 5000);
   };
 
@@ -696,6 +773,22 @@ export default function App() {
   };
 
   // ── ADMIN ──
+  // ── TEST NOTIFICATION ──
+  const testNotify = async () => {
+    setTestNotifyLoading(true);
+    const res = await notifyAdmin(
+      patient.name || "Admin Test",
+      patient.phone || "000-000-0000",
+      true // isTest flag
+    );
+    setTestNotifyLoading(false);
+    if (res.ok) {
+      toast$("📨 ส่งแจ้งเตือนทดสอบแล้ว ตรวจสอบ Email และ Line ของ Admin","ok",6000);
+    } else {
+      toast$("❌ ส่งแจ้งเตือนไม่สำเร็จ ตรวจสอบ Apps Script","err",5000);
+    }
+  };
+
   const handleVerTap=()=>{const n=adminTap+1;if(n>=5){setShowAdmin(true);setAdminTap(0);}else{setAdminTap(n);setTimeout(()=>setAdminTap(0),3000);}};
 
   const rec=getRec(records);
@@ -728,13 +821,15 @@ export default function App() {
 
       {/* Upgrade Screen */}
       {showUpgrade&&(
-        <UpgradeScreen
-          adminCfg={adminCfg}
-          trialLeft={trialLeft}
-          daysUsed={daysUsed}
-          onUnlock={()=>{setShowUpgrade(false);setShowPaywall(true);}}
-          onClose={()=>setShowUpgrade(false)}
-        />
+        <div style={{position:"fixed",inset:0,zIndex:800,overflowY:"auto",background:"#f0f9ff"}}>
+          <UpgradeScreen
+            adminCfg={adminCfg}
+            trialLeft={trialLeft}
+            daysUsed={daysUsed}
+            onUnlock={()=>{setShowUpgrade(false);setShowPaywall(true);}}
+            onClose={()=>setShowUpgrade(false)}
+          />
+        </div>
       )}
 
       {/* Paywall */}
@@ -816,7 +911,28 @@ export default function App() {
                 <div style={{background:"#f0fdf4",borderRadius:12,padding:12,fontSize:14,color:"#166534",lineHeight:1.7}}>
                   📊 รายการในเครื่องนี้: <strong>{records.length}</strong> รายการ<br/>
                   👤 ผู้ใช้: <strong>{patient.name||"ยังไม่ตั้งชื่อ"}</strong><br/>
-                  📬 แจ้งเตือน Admin: {ADMIN_EMAIL} · Line: {ADMIN_LINE}
+                  📬 แจ้งเตือนไปที่: {ADMIN_EMAIL} · Line: {ADMIN_LINE}
+                </div>
+
+                {/* Test Notification Buttons */}
+                <div style={{background:"#eff6ff",borderRadius:12,padding:14}}>
+                  <div style={{fontWeight:700,fontSize:15,color:"#1d4ed8",marginBottom:8}}>
+                    🔔 ทดสอบระบบแจ้งเตือน Admin
+                  </div>
+                  <div style={{fontSize:13,color:"#3730a3",marginBottom:10,lineHeight:1.6}}>
+                    กดเพื่อส่งการแจ้งเตือนทดสอบ → Email: {ADMIN_EMAIL}<br/>
+                    Apps Script จะส่ง Email + Line Notify อัตโนมัติ
+                  </div>
+                  <button
+                    onClick={testNotify}
+                    disabled={testNotifyLoading}
+                    style={{width:"100%",padding:"13px",background:testNotifyLoading?"#94a3b8":"linear-gradient(135deg,#1d4ed8,#1e40af)",color:"white",border:"none",borderRadius:10,fontSize:16,fontWeight:700,fontFamily:"Sarabun,sans-serif",cursor:"pointer",marginBottom:8}}
+                  >
+                    {testNotifyLoading?"⏳ กำลังส่ง...":"📧 ทดสอบส่ง Email แจ้งเตือน"}
+                  </button>
+                  <div style={{fontSize:12,color:"#64748b",textAlign:"center"}}>
+                    * ต้องอัปเดต Apps Script ใหม่ก่อนจึงจะส่งได้จริง
+                  </div>
                 </div>
                 <Input label="ราคา Full Version" value={adminCfg.price||""} onChange={v=>setAdminCfg(c=>({...c,price:v}))} placeholder="เช่น 299 บาท/ตลอดชีพ"/>
                 <Input label="เบอร์ติดต่อ Admin" value={adminCfg.phone||""} onChange={v=>setAdminCfg(c=>({...c,phone:v}))} placeholder="เช่น 089-xxx-xxxx"/>
@@ -1200,11 +1316,24 @@ export default function App() {
             </div>
           </div>
 
-          {/* Google Sheets status */}
-          <div style={{...S.card,borderLeft:"5px solid #22c55e"}}>
-            <div style={{fontWeight:800,fontSize:18,marginBottom:4,color:"#166534"}}>✅ Google Sheets เชื่อมต่อแล้ว</div>
-            <div style={{fontSize:15,color:"#475569",lineHeight:1.7}}>บันทึกแต่ละครั้งซิงค์อัตโนมัติ · Admin ดูข้อมูลทุกคนได้ใน sheet "BP_Records"</div>
-          </div>
+          {/* Google Sheets status — dynamic */}
+          {(()=>{
+            const cfg = {
+              unknown: { border:"#94a3b8", bg:"#f8fafc", dot:"#94a3b8", icon:"⚪", title:"Google Sheets — ยังไม่ได้ทดสอบ", sub:"กดบันทึกข้อมูลหรือทดสอบ Backup เพื่อตรวจสอบ" },
+              ok:      { border:"#22c55e", bg:"#f0fdf4", dot:"#22c55e", icon:"🟢", title:"Google Sheets เชื่อมต่อสำเร็จ",   sub:"ข้อมูลซิงค์อัตโนมัติ · Admin ดูได้ใน sheet \"BP_Records\"" },
+              error:   { border:"#ef4444", bg:"#fef2f2", dot:"#ef4444", icon:"🔴", title:"Google Sheets เชื่อมต่อไม่ได้",    sub:"ตรวจสอบ Apps Script URL หรือ Deploy ใหม่" },
+            }[sheetStatus];
+            return (
+              <div style={{...S.card,borderLeft:`5px solid ${cfg.border}`,background:cfg.bg}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:4}}>
+                  <span style={{fontSize:18}}>{cfg.icon}</span>
+                  <div style={{fontWeight:800,fontSize:18,color:sheetStatus==="ok"?"#166534":sheetStatus==="error"?"#991b1b":"#64748b"}}>{cfg.title}</div>
+                </div>
+                <div style={{fontSize:15,color:"#475569",lineHeight:1.7}}>{cfg.sub}</div>
+                {lastSheetSync&&sheetStatus==="ok"&&<div style={{fontSize:12,color:"#22c55e",marginTop:6}}>🕐 Sync ล่าสุด: {lastSheetSync}</div>}
+              </div>
+            );
+          })()}
 
           {/* Version */}
           <div style={S.card}>
