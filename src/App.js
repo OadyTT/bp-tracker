@@ -12,7 +12,7 @@ const KEY_INSTALL  = "bp-install-date";
 const KEY_UNLOCKED = "bp-unlocked";
 const KEY_ADMIN    = "bp-admin-cfg";
 const KEY_BACKUP_TS= "bp-last-backup";
-const SCRIPT_URL   = "https://script.google.com/macros/s/AKfycbxN0gf9mWMF9I4fCazGo4WhyWONrStPMiwuM-Xnc6GZSRk7iXf1V6E_HR5NPPkWB2eZ9w/exec";
+const SCRIPT_URL   = "https://script.google.com/macros/s/AKfycbzmjaZeh-rKiHq643431PmS1l_Z2n1NE4gVz8Hu-THHECV-748Nr5fkB3E0wzFopi4h4w/exec";
 // ═══════════════════════════════════════════════
 
 const todayISO = () => new Date().toISOString().split("T")[0];
