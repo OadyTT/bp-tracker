@@ -387,8 +387,9 @@ const Paywall = ({adminCfg, onUnlock, onBack}) => {
         <div style={{textAlign:"center",marginBottom:16}}>
           <div style={{fontSize:44,marginBottom:6}}>🔒</div>
           <div style={{fontSize:22,fontWeight:800,color:"#0369a1"}}>ระยะทดลองใช้</div>
+            <div style={{fontSize:20,fontWeight:800,color:"#0369a1"}}>สนับสนุนค่ากาแฟ</div>
           <div style={{fontSize:15,color:"#64748b",marginTop:4,lineHeight:1.7}}>
-            จำนวนวันทดลองใช้ <strong>{TRIAL_DAYS} วัน</strong> ..<br/>
+            จ่ายเพียง 299 บาท ตลอดชีพครับ ใช้ฟรีได้อีก <strong>{TRIAL_DAYS} วัน</strong> ขอบคุณครับ<br/>
             ใช้ไปแล้ว {daysUsed} วัน | เหลือ <span style={{color:"#ef4444",fontWeight:800}}>{daysLeft} วัน</span>
           </div>
         </div>
