@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 
 // ═══════════════════════════════════════════════
-const APP_VERSION  = "v1.6.3";
+const APP_VERSION  = "v1.7.0";
 const BUILD_DATE   = "20 มี.ค. 2568";
 const TRIAL_DAYS   = 60;
 const ADMIN_EMAIL  = "thitiphankk@gmail.com";
@@ -12,7 +12,7 @@ const KEY_INSTALL  = "bp-install-date";
 const KEY_UNLOCKED = "bp-unlocked";
 const KEY_ADMIN    = "bp-admin-cfg";
 const KEY_BACKUP_TS= "bp-last-backup";
-const SCRIPT_URL   = "https://script.google.com/macros/s/AKfycbzmjaZeh-rKiHq643431PmS1l_Z2n1NE4gVz8Hu-THHECV-748Nr5fkB3E0wzFopi4h4w/exec";
+const SCRIPT_URL   = "https://script.google.com/macros/s/AKfycbxN0gf9mWMF9I4fCazGo4WhyWONrStPMiwuM-Xnc6GZSRk7iXf1V6E_HR5NPPkWB2eZ9w/exec";
 // ═══════════════════════════════════════════════
 
 const todayISO = () => new Date().toISOString().split("T")[0];
@@ -280,46 +280,54 @@ const UpgradeScreen = ({adminCfg, trialLeft, daysUsed, onUnlock, onClose}) => {
       <div style={{margin:"16px 14px 0",background:"white",borderRadius:18,padding:20,boxShadow:"0 4px 16px rgba(0,0,0,0.1)"}}>
         {adminCfg.price&&(
           <div style={{textAlign:"center",marginBottom:16}}>
-            <div style={{fontSize:14,color:"#64748b"}}>ราคาพิเศษ</div>
-            <div style={{fontSize:36,fontWeight:800,color:"#0284c7"}}>{adminCfg.price}</div>
-            <div style={{fontSize:14,color:"#22c55e",fontWeight:700}}>✅ จ่ายครั้งเดียว ใช้ได้ตลอดชีพ</div>
+            <div style={{fontSize:13,color:"#64748b"}}>ราคาพิเศษ</div>
+            <div style={{fontSize:40,fontWeight:800,color:"#0284c7",lineHeight:1.1}}>{adminCfg.price}</div>
+            <div style={{fontSize:14,color:"#22c55e",fontWeight:700,marginTop:4}}>✅ จ่ายครั้งเดียว ใช้ได้ตลอดชีพ ไม่มีค่ารายเดือน</div>
           </div>
         )}
-        {adminCfg.qrUrl&&(
-          <div style={{textAlign:"center",marginBottom:14}}>
-            <div style={{fontSize:15,fontWeight:700,color:"#475569",marginBottom:8}}>สแกน QR โอนเงินได้เลย</div>
-            <img
-              src={adminCfg.qrUrl}
-              alt="QR Payment"
-              style={{width:200,height:200,borderRadius:12,border:"2px solid #e2e8f0",objectFit:"contain",background:"white"}}
-              onError={e=>{e.target.style.display="none";e.target.nextSibling&&(e.target.nextSibling.style.display="block");}}
-            />
-            <div style={{display:"none",background:"#fef9c3",borderRadius:10,padding:"10px 14px",fontSize:14,color:"#92400e"}}>
-              ⚠️ ไม่สามารถโหลดรูป QR ได้ กรุณาติดต่อ Line: {ADMIN_LINE}
+
+        {/* QR Code ใหญ่ชัดเจน */}
+        {adminCfg.qrUrl ? (
+          <div style={{textAlign:"center",marginBottom:16}}>
+            <div style={{fontSize:15,fontWeight:800,color:"#0369a1",marginBottom:10}}>📲 สแกน QR โอนเงินได้เลย</div>
+            <div style={{display:"inline-block",padding:10,background:"white",borderRadius:16,border:"3px solid #0284c7",boxShadow:"0 4px 16px rgba(2,132,199,0.2)"}}>
+              <img
+                src={adminCfg.qrUrl}
+                alt="QR Payment"
+                style={{width:220,height:220,display:"block",borderRadius:8,objectFit:"contain"}}
+                onError={e=>{e.target.style.display="none";e.target.nextSibling&&(e.target.nextSibling.style.display="flex");}}
+              />
+              <div style={{display:"none",width:220,height:220,alignItems:"center",justifyContent:"center",background:"#f8fafc",borderRadius:8,color:"#94a3b8",fontSize:14,textAlign:"center",padding:20}}>
+                ไม่สามารถโหลด QR ได้<br/>ติดต่อ Line: {ADMIN_LINE}
+              </div>
             </div>
           </div>
-        )}
-        {!adminCfg.qrUrl&&(adminCfg.bankName||adminCfg.phone)&&(
-          <div style={{background:"#fef9c3",borderRadius:14,padding:"14px 16px",marginBottom:14,textAlign:"center",fontSize:15,color:"#92400e",lineHeight:1.7}}>
-            📞 ติดต่อรับ QR Code โอนเงินได้ที่<br/>
-            Line: <strong>{ADMIN_LINE}</strong>
-            {adminCfg.phone&&<span> · โทร: <strong>{adminCfg.phone}</strong></span>}
+        ):(
+          <div style={{background:"#fefce8",borderRadius:14,padding:"14px 16px",marginBottom:14,textAlign:"center",fontSize:15,color:"#92400e",lineHeight:1.8,border:"1.5px solid #fde68a"}}>
+            <div style={{fontSize:24,marginBottom:4}}>📲</div>
+            <div style={{fontWeight:800}}>ขอรับ QR Code โอนเงินได้ที่</div>
+            Line ID: <strong>{ADMIN_LINE}</strong>
+            {adminCfg.phone&&<div>📞 โทร: <strong>{adminCfg.phone}</strong></div>}
           </div>
         )}
+
+        {/* ข้อมูลบัญชี */}
         {(adminCfg.bankName||adminCfg.accountNo)&&(
-          <div style={{background:"#f0f9ff",borderRadius:12,padding:"12px 16px",marginBottom:14,fontSize:15,lineHeight:2}}>
-            {adminCfg.bankName&&<div>🏦 <strong>{adminCfg.bankName}</strong></div>}
-            {adminCfg.accountNo&&<div>📋 เลขบัญชี: <strong>{adminCfg.accountNo}</strong></div>}
-            {adminCfg.accountName&&<div>👤 ชื่อ: <strong>{adminCfg.accountName}</strong></div>}
+          <div style={{background:"#f0f9ff",borderRadius:12,padding:"12px 16px",marginBottom:14,fontSize:15,lineHeight:2,border:"1px solid #bae6fd"}}>
+            {adminCfg.bankName&&<div>🏦 ธนาคาร: <strong>{adminCfg.bankName}</strong></div>}
+            {adminCfg.accountNo&&<div>📋 เลขบัญชี: <strong style={{letterSpacing:"0.05em"}}>{adminCfg.accountNo}</strong></div>}
+            {adminCfg.accountName&&<div>👤 ชื่อบัญชี: <strong>{adminCfg.accountName}</strong></div>}
           </div>
         )}
+
         {adminCfg.phone&&(
           <div style={{textAlign:"center",marginBottom:14,fontSize:15,color:"#0369a1",fontWeight:700}}>
             📞 ติดต่อสอบถาม: <a href={`tel:${adminCfg.phone}`} style={{color:"#0284c7"}}>{adminCfg.phone}</a>
           </div>
         )}
+
         <button onClick={onUnlock} style={{width:"100%",padding:"20px",background:"linear-gradient(135deg,#0284c7,#075985)",color:"white",border:"none",borderRadius:14,fontSize:21,fontWeight:800,fontFamily:"Sarabun,sans-serif",cursor:"pointer",boxShadow:"0 4px 16px rgba(2,132,199,0.4)"}}>
-          🔓 ปลดล็อค Full Version
+          🔓 ใส่รหัสปลดล็อค Full Version
         </button>
         <div style={{textAlign:"center",marginTop:10,fontSize:13,color:"#94a3b8"}}>
           หลังโอนเงินแล้ว รับรหัสปลดล็อคทาง Line: <strong>{ADMIN_LINE}</strong>
@@ -794,6 +802,8 @@ export default function App() {
   const rec=getRec(records);
   const mStatus=bpStatus(form.morningSys,form.morningDia);
   const eStatus=bpStatus(form.eveningSys,form.eveningDia);
+  // isPremium = Full Version หรือ อยู่ในช่วงทดลอง 60 วัน
+  const isPremium = isUnlocked || (trialLeft > 0);
 
   const S={
     app:     {fontFamily:"'Sarabun', sans-serif",background:"#f0f9ff",minHeight:"100vh",maxWidth:520,margin:"0 auto",paddingBottom:90},
@@ -1107,16 +1117,29 @@ export default function App() {
         <div style={{paddingTop:16}}>
           <div style={{padding:"0 14px 12px",display:"flex",gap:10}}>
             <button style={S.btnGhost} onClick={()=>setTab("report")}>📸 รายงาน</button>
-            <button style={S.btnGhost} onClick={doPrint}>🖨️ พิมพ์ A4</button>
+            {isPremium
+              ? <button style={S.btnGhost} onClick={doPrint}>🖨️ พิมพ์ A4</button>
+              : <button style={{...S.btnGhost,opacity:.5,borderColor:"#94a3b8",color:"#94a3b8"}} onClick={()=>setShowUpgrade(true)}>🖨️ พิมพ์ A4 🔒</button>
+            }
           </div>
-          {records.length>=2&&<div style={S.card}><div style={{fontWeight:800,fontSize:18,marginBottom:12}}>📈 กราฟ 14 วันล่าสุด</div><BPGraph records={records}/></div>}
+          {records.length>=2&&(
+            isPremium
+              ? <div style={S.card}><div style={{fontWeight:800,fontSize:18,marginBottom:12}}>📈 กราฟ 14 วันล่าสุด</div><BPGraph records={records}/></div>
+              : <div style={{...S.card,borderLeft:"4px solid #e2e8f0",opacity:.7}}>
+                  <div style={{fontWeight:700,fontSize:16,color:"#94a3b8",marginBottom:6}}>📈 กราฟแนวโน้มความดัน</div>
+                  <div style={{fontSize:14,color:"#94a3b8",marginBottom:10}}>ฟีเจอร์นี้ใช้ได้ใน Full Version</div>
+                  <button onClick={()=>setShowUpgrade(true)} style={{...S.btnMain,fontSize:15,padding:"12px",background:"linear-gradient(135deg,#0f172a,#1e3a5f)"}}>💎 ดู Full Version</button>
+                </div>
+          )}
           {rec&&(
-            <div style={{...S.card,borderLeft:`5px solid ${rec.status?.bar||"#22c55e"}`}}>
-              <div style={{fontWeight:800,fontSize:18,marginBottom:8}}>🩺 คำแนะนำสุขภาพ</div>
-              <div style={{fontSize:15,color:"#475569",marginBottom:10}}>ค่าเฉลี่ย 7 วัน: <strong style={{color:rec.status?.fg}}>{rec.avgS}/{rec.avgD} mmHg</strong>{rec.status&&<span style={{...S.badge(rec.status),marginLeft:8,fontSize:13}}>{rec.status.label}</span>}</div>
-              {rec.tips.map((t,i)=><div key={i} style={{fontSize:15,color:"#334155",padding:"6px 0",borderBottom:i<rec.tips.length-1?"1px solid #f1f5f9":""}}>{t}</div>)}
-              <div style={{fontSize:12,color:"#94a3b8",marginTop:8}}>อ้างอิง: WHO, AHA, ESC Guidelines 2023</div>
-            </div>
+            isPremium
+              ? <div style={{...S.card,borderLeft:`5px solid ${rec.status?.bar||"#22c55e"}`}}>
+                  <div style={{fontWeight:800,fontSize:18,marginBottom:8}}>🩺 คำแนะนำสุขภาพ</div>
+                  <div style={{fontSize:15,color:"#475569",marginBottom:10}}>ค่าเฉลี่ย 7 วัน: <strong style={{color:rec.status?.fg}}>{rec.avgS}/{rec.avgD} mmHg</strong>{rec.status&&<span style={{...S.badge(rec.status),marginLeft:8,fontSize:13}}>{rec.status.label}</span>}</div>
+                  {rec.tips.map((t,i)=><div key={i} style={{fontSize:15,color:"#334155",padding:"6px 0",borderBottom:i<rec.tips.length-1?"1px solid #f1f5f9":""}}>{t}</div>)}
+                  <div style={{fontSize:12,color:"#94a3b8",marginTop:8}}>อ้างอิง: WHO, AHA, ESC Guidelines 2023</div>
+                </div>
+              : null
           )}
           {records.length===0?(
             <div style={{textAlign:"center",padding:"70px 20px",color:"#94a3b8"}}>
@@ -1170,12 +1193,22 @@ export default function App() {
       {tab==="report"&&(
         <div style={{paddingTop:16}}>
           <div style={{padding:"0 14px 12px"}}>
-            <button onClick={saveJPG} disabled={capturing} style={{...S.btnMain,background:capturing?"#94a3b8":"linear-gradient(135deg,#0f766e,#0d9488)",marginBottom:10}}>
-              {capturing?"⏳ กำลังสร้างรูปภาพ...":"📸 บันทึกเป็นรูปภาพ (JPG)"}
-            </button>
-            <button onClick={doPrint} style={{...S.btnGhost,width:"100%",display:"block",background:"#f0f9ff",border:"2px solid #0284c7"}}>
-              🖨️ เปิดหน้ารายงาน A4 (พิมพ์ / PDF)
-            </button>
+            {isPremium
+              ? <>
+                  <button onClick={saveJPG} disabled={capturing} style={{...S.btnMain,background:capturing?"#94a3b8":"linear-gradient(135deg,#0f766e,#0d9488)",marginBottom:10}}>
+                    {capturing?"⏳ กำลังสร้างรูปภาพ...":"📸 บันทึกเป็นรูปภาพ (JPG)"}
+                  </button>
+                  <button onClick={doPrint} style={{...S.btnGhost,width:"100%",display:"block",background:"#f0f9ff",border:"2px solid #0284c7"}}>
+                    🖨️ เปิดหน้ารายงาน A4 (พิมพ์ / PDF)
+                  </button>
+                </>
+              : <div style={{background:"#f8fafc",borderRadius:14,padding:20,textAlign:"center",border:"2px dashed #e2e8f0"}}>
+                  <div style={{fontSize:32,marginBottom:8}}>🔒</div>
+                  <div style={{fontWeight:800,fontSize:17,color:"#0f172a",marginBottom:6}}>บันทึก JPG / PDF เป็น Full Version</div>
+                  <div style={{fontSize:14,color:"#64748b",marginBottom:14}}>อัปเกรดเพื่อบันทึกรายงานและพิมพ์ A4</div>
+                  <button onClick={()=>setShowUpgrade(true)} style={{...S.btnMain,fontSize:17}}>💎 ดูรายละเอียด Full Version</button>
+                </div>
+            }
           </div>
           <div ref={reportRef} style={{margin:"0 14px 14px",background:"white",borderRadius:18,padding:20,boxShadow:"0 2px 8px rgba(0,0,0,0.07)"}}>
             <div style={{borderBottom:"3px solid #0284c7",paddingBottom:14,marginBottom:14,textAlign:"center"}}>
@@ -1301,10 +1334,17 @@ export default function App() {
             {/* Sheet backup */}
             <div style={{background:"#f0fdf4",borderRadius:14,padding:14,marginBottom:12}}>
               <div style={{fontWeight:700,fontSize:16,color:"#059669",marginBottom:8}}>☁️ อัปโหลดขึ้น Google Sheets ({records.length} รายการ)</div>
-              <button onClick={backupToSheet} disabled={syncing} style={{...S.btnMain,background:"linear-gradient(135deg,#059669,#047857)",fontSize:17}}>
-                {syncing?"⏳ กำลังอัปโหลด...":"☁️ อัปโหลดทั้งหมดขึ้น Sheets"}
-              </button>
-              {lastSheetSync&&<div style={{marginTop:8,fontSize:12,color:"#059669",textAlign:"center"}}>🕐 Sync ล่าสุด: {lastSheetSync}</div>}
+              {isPremium
+                ? <>
+                    <button onClick={backupToSheet} disabled={syncing} style={{...S.btnMain,background:"linear-gradient(135deg,#059669,#047857)",fontSize:17}}>
+                      {syncing?"⏳ กำลังอัปโหลด...":"☁️ อัปโหลดทั้งหมดขึ้น Sheets"}
+                    </button>
+                    {lastSheetSync&&<div style={{marginTop:8,fontSize:12,color:"#059669",textAlign:"center"}}>🕐 Sync ล่าสุด: {lastSheetSync}</div>}
+                  </>
+                : <button onClick={()=>setShowUpgrade(true)} style={{...S.btnMain,background:"linear-gradient(135deg,#0f172a,#1e3a5f)",fontSize:17}}>
+                    🔒 Backup Cloud — Full Version เท่านั้น
+                  </button>
+              }
             </div>
 
             {/* Import */}
