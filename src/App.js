@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 
 // ═══════════════════════════════════════════════
-const APP_VERSION  = "v1.8.1";
+const APP_VERSION  = "v1.8.2";
 const BUILD_DATE   = "26 มี.ค. 2568";
 const TRIAL_DAYS   = 60;
 const ADMIN_EMAIL  = "thitiphankk@gmail.com";
@@ -438,11 +438,11 @@ export default function App(){
   const changeFontScale=f=>{setFontScale(f);localStorage.setItem(KEY_FONTSCALE,f);};
 
   // ── FORM ──────────────────────────────────────
-  const changeDate=useCallback((newDate)=>{
+  const changeDate=(newDate)=>{
     const ex=records.find(r=>r.date===newDate);
     if(ex){setForm({...ex});toast$(`📋 ${toThai(newDate,lang)}`,"ok",2000);}
-    else setForm({...emptyForm,date:newDate});
-  },[records,lang]);
+    else setForm({date:newDate,morningTime:"",morningSys:"",morningDia:"",morningPulse:"",eveningTime:"",eveningSys:"",eveningDia:"",eveningPulse:""});
+  };
   const setF=k=>v=>{if(k==="date"){changeDate(v);return;}setForm(f=>({...f,[k]:v}));};
 
   // ── SUBMIT ────────────────────────────────────
