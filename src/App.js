@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 
 // ═══════════════════════════════════════════════
-const APP_VERSION  = "v1.8.0";
+const APP_VERSION  = "v1.8.1";
 const BUILD_DATE   = "26 มี.ค. 2568";
 const TRIAL_DAYS   = 60;
 const ADMIN_EMAIL  = "thitiphankk@gmail.com";
@@ -173,7 +173,17 @@ const trialCheck=async(deviceId,token)=>{
   try{const r=await fetch("/api/verify",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({type:"trial_check",deviceId,token})});return await r.json();}catch{return null;}
 };
 const syncToSheet=async(entry,patientName)=>{
-  try{const fd=new FormData();fd.append("data",JSON.stringify({...entry,patientName}));await fetch(SCRIPT_URL,{method:"POST",mode:"no-cors",body:fd});return{ok:true};}catch{return{ok:false};}
+  try{
+    const fd=new FormData();
+    fd.append("data",JSON.stringify({...entry,patientName}));
+    const controller=new AbortController();
+    const timer=setTimeout(()=>controller.abort(),8000); // 8s timeout
+    await fetch(SCRIPT_URL,{method:"POST",mode:"no-cors",body:fd,signal:controller.signal});
+    clearTimeout(timer);
+    return{ok:true};
+  }catch(e){
+    return{ok:false,err:e.message};
+  }
 };
 const syncAll=async(records,patientName,onProg)=>{
   let ok=0,fail=0;
@@ -306,9 +316,9 @@ const Paywall=({adminCfg,onUnlock,onBack,lang="TH",scale=1})=>{
           style={{width:"100%",padding:14,borderRadius:12,border:`2px solid ${err?"#ef4444":"#cbd5e1"}`,fontSize:Math.round(18*fs),fontFamily:"Sarabun,sans-serif",boxSizing:"border-box",textAlign:"center",fontWeight:700,outline:"none",marginBottom:err?6:12}}/>
         {err&&<div style={{color:"#ef4444",fontSize:Math.round(14*fs),marginBottom:8,textAlign:"center"}}>❌ {lang==="EN"?"Invalid code":"รหัสไม่ถูกต้อง"}</div>}
         <button onClick={tryUnlock} disabled={loading}
-          style={{width:"100%",padding:16,background:loading?"#94a3b8":"linear-gradient(135deg,#0284c7,#075985)",color:"white",border:"none",borderRadius:12,fontSize:Math.round(20*fs),fontWeight:800,fontFamily:"Sarabun,sans-serif",cursor:"pointer"}}>
-          {loading?"⏳...":{Ic.Unlock(20)}{" "}{t.unlockFull}
-          }</button>
+          style={{width:"100%",padding:16,background:loading?"#94a3b8":"linear-gradient(135deg,#0284c7,#075985)",color:"white",border:"none",borderRadius:12,fontSize:Math.round(20*fs),fontWeight:800,fontFamily:"Sarabun,sans-serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+          {loading ? "⏳..." : <>{Ic.Unlock(20)}{" "}{t.unlockFull}</>}
+        </button>
       </div>
     </div>
   );
@@ -907,7 +917,7 @@ export default function App(){
           <div style={S.card}>
             <Input label={`${Ic.Tag(18)}  ${t.date}`} type="date" value={form.date} onChange={setF("date")} scale={fs}/>
             {(()=>{const ex=records.find(r=>r.date===form.date);if(!ex)return<div style={{marginTop:10,fontSize:Math.round(14*fs),color:"#94a3b8",background:"#f8fafc",borderRadius:10,padding:"8px 12px"}}>{t.newDay}</div>;
-              return<div style={{marginTop:10,fontSize:Math.round(14*fs),background:"#fefce8",borderRadius:10,padding:"10px 12px",border:"1.5px solid #fde68a"}}><div style={{fontWeight:700,color:"#92400e",marginBottom:3}}>{Ic.Edit(14)}{" "}{t.existingData}</div><div style={{color:"#78350f"}}>{ex.morningSys?`${Ic.Sun(12)} ${ex.morningSys}/${ex.morningDia}`:`${Ic.Sun(12)} -`}{"  ·  "}{ex.eveningSys?`${Ic.Moon(12)} ${ex.eveningSys}/${ex.eveningDia}`:`${Ic.Moon(12)} -`}</div></div>;
+              return<div style={{marginTop:10,fontSize:Math.round(14*fs),background:"#fefce8",borderRadius:10,padding:"10px 12px",border:"1.5px solid #fde68a"}}><div style={{fontWeight:700,color:"#92400e",marginBottom:3}}>{Ic.Edit(14)}{" "}{t.existingData}</div><div style={{color:"#78350f",display:"flex",alignItems:"center",gap:4}}>{ex.morningSys?<span>{ex.morningSys}/{ex.morningDia}</span>:<span>–</span>}<span style={{margin:"0 6px"}}>·</span>{ex.eveningSys?<span>{ex.eveningSys}/{ex.eveningDia}</span>:<span>–</span>}</div></div>;
             })()}
           </div>
 
