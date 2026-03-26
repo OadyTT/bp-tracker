@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 
 // ═══════════════════════════════════════════════
-const APP_VERSION  = "v1.8.2";
+const APP_VERSION  = "v1.8.3";
 const BUILD_DATE   = "26 มี.ค. 2568";
 const TRIAL_DAYS   = 60;
 const ADMIN_EMAIL  = "thitiphankk@gmail.com";
@@ -174,11 +174,18 @@ const trialCheck=async(deviceId,token)=>{
 };
 const syncToSheet=async(entry,patientName)=>{
   try{
-    const fd=new FormData();
-    fd.append("data",JSON.stringify({...entry,patientName}));
+    // ใช้ URLSearchParams แทน FormData เพราะ Apps Script อ่าน e.parameter ได้เฉพาะ urlencoded
+    const params=new URLSearchParams();
+    params.append("data",JSON.stringify({...entry,patientName}));
     const controller=new AbortController();
-    const timer=setTimeout(()=>controller.abort(),8000); // 8s timeout
-    await fetch(SCRIPT_URL,{method:"POST",mode:"no-cors",body:fd,signal:controller.signal});
+    const timer=setTimeout(()=>controller.abort(),10000);
+    await fetch(SCRIPT_URL,{
+      method:"POST",
+      mode:"no-cors",
+      headers:{"Content-Type":"application/x-www-form-urlencoded"},
+      body:params.toString(),
+      signal:controller.signal
+    });
     clearTimeout(timer);
     return{ok:true};
   }catch(e){
@@ -191,7 +198,12 @@ const syncAll=async(records,patientName,onProg)=>{
   return{ok,fail};
 };
 const notifyAdmin=async(patientName,phone,isTest=false)=>{
-  try{const fd=new FormData();fd.append("data",JSON.stringify({type:"payment_request",patientName,phone,adminEmail:ADMIN_EMAIL,adminLine:ADMIN_LINE,isTest,timestamp:new Date().toLocaleString("th-TH"),appVersion:APP_VERSION}));await fetch(SCRIPT_URL,{method:"POST",mode:"no-cors",body:fd});return{ok:true};}catch(e){return{ok:false};}
+  try{
+    const params=new URLSearchParams();
+    params.append("data",JSON.stringify({type:"payment_request",patientName,phone,adminEmail:ADMIN_EMAIL,adminLine:ADMIN_LINE,isTest,timestamp:new Date().toLocaleString("th-TH"),appVersion:APP_VERSION}));
+    await fetch(SCRIPT_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:params.toString()});
+    return{ok:true};
+  }catch(e){return{ok:false};}
 };
 
 // ── Input Component ──────────────────────────────
@@ -357,6 +369,7 @@ export default function App(){
   const [adminLoading,setAdminLoading]=useState(false);
   const [testNotifyLoading,setTestNotifyLoading]=useState(false);
   const [showGuide,setShowGuide]=useState(false);
+  const [showHelp,setShowHelp]=useState(false);
   const [testResult,setTestResult]=useState(null);
   const [deferredPrompt,setDeferredPrompt]=useState(null);
   const [isInstalled,setIsInstalled]=useState(false);
@@ -461,7 +474,8 @@ export default function App(){
       eveningSys:form.eveningSys||ex?.eveningSys||"",
       eveningDia:form.eveningSys?form.eveningDia:(ex?.eveningDia||""),
       eveningPulse:form.eveningSys?form.eveningPulse:(ex?.eveningPulse||""),};
-    const next=idx>=0?records.map((r,i)=>i===idx?entry:r):[...records,entry].sort((a,b)=>a.date.localeCompare(b.date));
+    const updated=idx>=0?records.map((r,i)=>i===idx?entry:r):[...records,entry];
+    const next=[...updated].sort((a,b)=>a.date.localeCompare(b.date));
     setRecords(next);lsSet(KEY_RECORDS,next);
     const res=await syncToSheet(entry,patient.name);
     if(res.ok){const ts=nowStr();localStorage.setItem("bp-sheet-sync-ts",ts);setLastSheetSync(ts);setSheetStatus("ok");}
@@ -496,7 +510,7 @@ export default function App(){
   };
   const importBackup=e=>{
     const file=e.target.files[0];if(!file)return;
-    const r=new FileReader();r.onload=ev=>{try{const d=JSON.parse(ev.target.result);if(d.records){setRecords(d.records);lsSet(KEY_RECORDS,d.records);}if(d.patient){setPatient(d.patient);lsSet(KEY_PATIENT,d.patient);}toast$(`📤 ${d.records?.length||0} records`);}catch{toast$("Invalid file","err");}};
+    const r=new FileReader();r.onload=ev=>{try{const d=JSON.parse(ev.target.result);if(d.records){const sorted=[...d.records].sort((a,b)=>a.date.localeCompare(b.date));setRecords(sorted);lsSet(KEY_RECORDS,sorted);}if(d.patient){setPatient(d.patient);lsSet(KEY_PATIENT,d.patient);}toast$(`📤 ${d.records?.length||0} records`);}catch{toast$("Invalid file","err");}};
     r.readAsText(file);e.target.value="";
   };
   const testBackup=async()=>{
@@ -582,11 +596,14 @@ export default function App(){
   };
 
   if(!loaded||trialLoading)return(
-    <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",fontFamily:"Sarabun,sans-serif"}}>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",fontFamily:"Sarabun,sans-serif",background:"#f0f9ff"}}>
       <div style={{textAlign:"center"}}>
-        <div style={{color:"#0284c7",marginBottom:10}}>{Ic.Heart(Math.round(52*fs))}</div>
-        <div style={{color:"#64748b",fontSize:Math.round(20*fs)}}>{lang==="EN"?"Loading...":"กำลังโหลด..."}</div>
-        {trialLoading&&<div style={{color:"#94a3b8",fontSize:Math.round(14*fs),marginTop:6}}>{lang==="EN"?"Verifying trial...":"กำลังตรวจสอบสิทธิ์..."}</div>}
+        <div style={{color:"#0284c7",marginBottom:16,animation:"pulse 1.5s ease-in-out infinite"}}>{Ic.Heart(Math.round(60*fs))}</div>
+        <div style={{color:"#64748b",fontSize:Math.round(20*fs),fontWeight:700}}>{lang==="EN"?"Loading...":"กำลังโหลด..."}</div>
+        {trialLoading&&<div style={{color:"#94a3b8",fontSize:Math.round(14*fs),marginTop:8,animation:"pulse 1.5s ease-in-out infinite"}}>{lang==="EN"?"Verifying trial...":"กำลังตรวจสอบสิทธิ์..."}</div>}
+        <div style={{marginTop:20,display:"flex",justifyContent:"center",gap:8}}>
+          {[0,1,2].map(i=><div key={i} style={{width:10,height:10,borderRadius:"50%",background:"#0284c7",animation:`pulse 1.2s ease-in-out infinite`,animationDelay:`${i*0.2}s`}}/>)}
+        </div>
       </div>
     </div>
   );
@@ -596,7 +613,18 @@ export default function App(){
   return(
     <div style={S.app}>
       <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700;800&display=swap" rel="stylesheet"/>
-      <style>{`*{-webkit-tap-highlight-color:transparent;box-sizing:border-box;}input[type=number]::-webkit-inner-spin-button{opacity:.4;}`}</style>
+      <style>{`
+        *{-webkit-tap-highlight-color:transparent;box-sizing:border-box;}
+        input[type=number]::-webkit-inner-spin-button{opacity:.4;}
+        @keyframes spin{to{transform:rotate(360deg)}}
+        @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+        @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes slideUp{from{transform:translateY(40px);opacity:0}to{transform:translateY(0);opacity:1}}
+        .anim-spin{animation:spin 1s linear infinite}
+        .anim-pulse{animation:pulse 1.5s ease-in-out infinite}
+        .anim-fade{animation:fadeIn 0.3s ease-out}
+        .anim-slide{animation:slideUp 0.35s ease-out}
+      `}</style>
 
       {/* Toast */}
       {toast&&<div style={{position:"fixed",top:18,left:"50%",transform:"translateX(-50%)",background:toast.type==="err"?"#ef4444":toast.type==="warn"?"#f59e0b":"#22c55e",color:"white",padding:`${Math.round(14*fs)}px ${Math.round(24*fs)}px`,borderRadius:30,fontSize:Math.round(16*fs),fontWeight:700,zIndex:9999,boxShadow:"0 4px 24px rgba(0,0,0,0.18)",maxWidth:"92vw",textAlign:"center",lineHeight:1.5}}>{toast.msg}</div>}
@@ -759,6 +787,55 @@ export default function App(){
         </div>
       )}
 
+      {/* ═══ Help / Contact Modal ═══ */}
+      {showHelp&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.65)",zIndex:800,display:"flex",alignItems:"flex-end",justifyContent:"center",fontFamily:"Sarabun,sans-serif"}} onClick={()=>setShowHelp(false)}>
+          <div className="anim-slide" onClick={e=>e.stopPropagation()} style={{background:"white",borderRadius:"22px 22px 0 0",padding:28,width:"100%",maxWidth:520,paddingBottom:44}}>
+            <div style={{textAlign:"center",marginBottom:20}}>
+              <div style={{color:"#0284c7"}}>{Ic.Phone(Math.round(38*fs))}</div>
+              <div style={{fontWeight:800,fontSize:Math.round(22*fs),color:"#0f172a",marginTop:8}}>{lang==="EN"?"Help & Contact":"ติดต่อ & สอบถาม"}</div>
+              <div style={{fontSize:Math.round(15*fs),color:"#64748b",marginTop:4}}>{lang==="EN"?"We're here to help":"เราพร้อมช่วยเหลือคุณเสมอ"}</div>
+            </div>
+
+            {/* Contact channels */}
+            {[
+              {icon:Ic.Bell,label:"Line ID",value:ADMIN_LINE,color:"#22c55e",bg:"#f0fdf4",href:`https://line.me/ti/p/~${ADMIN_LINE}`},
+              {icon:Ic.Phone,label:"Email",value:ADMIN_EMAIL,color:"#0284c7",bg:"#eff6ff",href:`mailto:${ADMIN_EMAIL}`},
+              ...(adminCfg.phone?[{icon:Ic.Phone,label:lang==="EN"?"Phone":"โทรศัพท์",value:adminCfg.phone,color:"#7c3aed",bg:"#faf5ff",href:`tel:${adminCfg.phone}`}]:[]),
+            ].map((ch,i)=>(
+              <a key={i} href={ch.href} target="_blank" rel="noopener noreferrer"
+                style={{display:"flex",alignItems:"center",gap:14,background:ch.bg,borderRadius:14,padding:`${Math.round(14*fs)}px ${Math.round(18*fs)}px`,marginBottom:10,textDecoration:"none",border:`1.5px solid ${ch.color}20`}}>
+                <div style={{width:Math.round(44*fs),height:Math.round(44*fs),borderRadius:12,background:ch.color,color:"white",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                  {ch.icon(Math.round(22*fs))}
+                </div>
+                <div>
+                  <div style={{fontSize:Math.round(13*fs),color:"#64748b",fontWeight:600}}>{ch.label}</div>
+                  <div style={{fontSize:Math.round(18*fs),fontWeight:800,color:"#0f172a"}}>{ch.value}</div>
+                </div>
+                <div style={{marginLeft:"auto",fontSize:Math.round(22*fs),color:ch.color}}>›</div>
+              </a>
+            ))}
+
+            {/* Quick FAQ */}
+            <div style={{background:"#f8fafc",borderRadius:14,padding:16,marginTop:4}}>
+              <div style={{fontWeight:700,fontSize:Math.round(15*fs),color:"#475569",marginBottom:10}}>{lang==="EN"?"Common Questions":"คำถามที่พบบ่อย"}</div>
+              {[
+                [lang==="EN"?"How to backup data?":"วิธี backup ข้อมูล?",lang==="EN"?"Settings → Backup → Save to device or Google Sheets":"ตั้งค่า → Backup → บันทึกในเครื่อง หรือ Google Sheets"],
+                [lang==="EN"?"Forgot to record?":"ลืมบันทึกย้อนหลัง?",lang==="EN"?"Record tab → Change date → Fill in → Save":"บันทึก → เปลี่ยนวันที่ → กรอกค่า → บันทึก"],
+                [lang==="EN"?"How to unlock Full Version?":"วิธีปลดล็อค Full Version?",lang==="EN"?"Pay → Notify admin → Receive code → Unlock":"โอนเงิน → แจ้งชำระ → รับรหัส → ปลดล็อค"],
+              ].map(([q,a],i)=>(
+                <div key={i} style={{marginBottom:i<2?10:0,paddingBottom:i<2?10:0,borderBottom:i<2?"1px solid #e2e8f0":"none"}}>
+                  <div style={{fontWeight:700,fontSize:Math.round(14*fs),color:"#0f172a",marginBottom:3}}>❓ {q}</div>
+                  <div style={{fontSize:Math.round(13*fs),color:"#64748b",lineHeight:1.6}}>{a}</div>
+                </div>
+              ))}
+            </div>
+
+            <button onClick={()=>setShowHelp(false)} style={{...S.btnMain,marginTop:16}}>{lang==="EN"?"Close":"ปิด"}</button>
+          </div>
+        </div>
+      )}
+
       {/* Admin Modal */}
       {showAdmin&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:700,display:"flex",alignItems:"center",justifyContent:"center",padding:16,overflowY:"auto"}}>
@@ -836,6 +913,13 @@ export default function App(){
           </button>
         </div>
       )}
+
+      {/* Floating Help (?) Button */}
+      <div style={{position:"fixed",bottom:82,left:16,zIndex:90}}>
+        <button onClick={()=>setShowHelp(true)} style={{background:"white",color:"#0284c7",border:"2.5px solid #0284c7",borderRadius:30,width:Math.round(48*fs),height:Math.round(48*fs),fontSize:Math.round(20*fs),fontWeight:800,fontFamily:"Sarabun,sans-serif",cursor:"pointer",boxShadow:"0 2px 12px rgba(2,132,199,0.25)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+          ?
+        </button>
+      </div>
 
       {/* ═══ HOME ═══ */}
       {tab==="home"&&(
@@ -948,7 +1032,12 @@ export default function App(){
           </div>
 
           <div style={{padding:`0 14px ${Math.round(16*fs)}px`}}>
-            <button onClick={submit} disabled={saving} style={S.btnMain}>{saving?t.saving:t.save}</button>
+            <button onClick={submit} disabled={saving} style={{...S.btnMain,opacity:saving?0.85:1}}>
+              {saving
+                ?<><span style={{display:"inline-block",animation:"spin 1s linear infinite",marginRight:8}}>⟳</span>{t.saving}</>
+                :<>{Ic.Check(Math.round(20*fs))}{" "}{t.save}</>
+              }
+            </button>
           </div>
 
           <div style={S.card}>
@@ -1004,7 +1093,7 @@ export default function App(){
               const ms=bpStatus(r.morningSys,r.morningDia),es=bpStatus(r.eveningSys,r.eveningDia);
               const worst=rank(ms)>=rank(es)?(ms||es):(es||ms);
               return(
-                <div key={r.id} style={{...S.histCard,borderLeftColor:worst?worst.bar:"#e2e8f0"}}>
+                <div key={r.id} className="anim-fade" style={{...S.histCard,borderLeftColor:worst?worst.bar:"#e2e8f0"}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
                     <div>
                       <div style={{fontWeight:800,fontSize:Math.round(19*fs)}}>{toThai(r.date,lang)}</div>
