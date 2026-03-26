@@ -23,7 +23,7 @@ const KEY_SHEET_TS  = "bp-sheet-sync-ts";
 
 // Google Apps Script Web App URL
 // ⚠️ ต้อง Deploy เป็น "New deployment" ทุกครั้งที่แก้ไข GAS
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxN0gf9mWMF9I4fCazGo4WhyWONrStPMiwuM-Xnc6GZSRk7iXf1V6E_HR5NPPkWB2eZ9w/exec";
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxM33dLeillQUUizPrVRsjGWvhPkS2X54DDT41fe5Fev6Y7tnOBt8ds3EAmEtPoYYp58A/exec";
 
 // ═══════════════════════════════════════════════
 // i18n
