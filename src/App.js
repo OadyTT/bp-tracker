@@ -16,7 +16,7 @@ const KEY_FONTSCALE= "bp-fontscale";
 const KEY_DEVICE   = "bp-device-id";
 const KEY_TRIAL_TOK= "bp-trial-token";
 const KEY_SHEET_TS = "bp-sheet-sync-ts";
-const SCRIPT_URL   = "https://script.google.com/macros/s/AKfycbxN0gf9mWMF9I4fCazGo4WhyWONrStPMiwuM-Xnc6GZSRk7iXf1V6E_HR5NPPkWB2eZ9w/exec";
+const SCRIPT_URL   = "https://script.google.com/macros/s/AKfycbxM33dLeillQUUizPrVRsjGWvhPkS2X54DDT41fe5Fev6Y7tnOBt8ds3EAmEtPoYYp58A/exec";
 // ═══════════════════════════════════════════════
 
 // ── i18n ────────────────────────────────────────
