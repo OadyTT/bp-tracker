@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 
 // ═══════════════════════════════════════════════
-const APP_VERSION  = "v2.0.0";
-const BUILD_DATE   = "27 มี.ค. 2568";
+const APP_VERSION  = "v1.8.3";
+const BUILD_DATE   = "31 มี.ค. 2568";
 const TRIAL_DAYS   = 60;
 const ADMIN_EMAIL  = "thitiphankk@gmail.com";
 const ADMIN_LINE   = "Oady";
@@ -15,7 +15,6 @@ const KEY_LANG     = "bp-lang";
 const KEY_FONTSCALE= "bp-fontscale";
 const KEY_DEVICE   = "bp-device-id";
 const KEY_TRIAL_TOK= "bp-trial-token";
-const KEY_SHEET_TS = "bp-sheet-sync-ts";
 const SCRIPT_URL   = "https://script.google.com/macros/s/AKfycbxM33dLeillQUUizPrVRsjGWvhPkS2X54DDT41fe5Fev6Y7tnOBt8ds3EAmEtPoYYp58A/exec";
 // ═══════════════════════════════════════════════
 
@@ -53,9 +52,6 @@ const T = {
     unlockFull:"🔓 ปลดล็อค Full Version", enterCode:"ใส่รหัสปลดล็อค",
     notifyPay:"📲 แจ้งชำระเงิน", notifyDone:"✅ ส่งแจ้งเจ้าหน้าที่แล้ว",
     yourPhone:"เบอร์มือถือของคุณ",
-    sendSlip:"📎 ส่งสลิปโอนเงิน", selectSlip:"เลือกรูปสลิป",
-    slipSending:"⏳ กำลังส่งสลิป...", slipSent:"✅ ส่งสลิปเรียบร้อย รอตรวจสอบ",
-    slipFail:"❌ ส่งไม่สำเร็จ ลองใหม่", scanQR:"สแกน QR โอนเงิน", payTo:"โอนเงินไปที่",
   },
   EN: {
     appName:"Blood Pressure Log", appSub:"Home BP Tracker",
@@ -89,9 +85,6 @@ const T = {
     unlockFull:"🔓 Unlock Full Version", enterCode:"Enter unlock code",
     notifyPay:"📲 Notify Payment", notifyDone:"✅ Staff notified",
     yourPhone:"Your phone number",
-    sendSlip:"📎 Send Transfer Slip", selectSlip:"Select slip image",
-    slipSending:"⏳ Sending slip...", slipSent:"✅ Slip sent, awaiting approval",
-    slipFail:"❌ Failed, try again", scanQR:"Scan QR to Pay", payTo:"Transfer to",
   },
 };
 
@@ -131,8 +124,6 @@ const Ic = {
   Tag:  (s=24)=><svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>,
   Globe:(s=24)=><svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>,
   Text: (s=24)=><svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="4,7 4,4 20,4 20,7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>,
-  Paperclip:(s=24)=><svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>,
-  ImageIcon:(s=24)=><svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21,15 16,10 5,21"/></svg>,
 };
 
 // ── Helpers ─────────────────────────────────────
@@ -183,10 +174,11 @@ const trialCheck=async(deviceId,token)=>{
 };
 const syncToSheet=async(entry,patientName)=>{
   try{
-    const payload=JSON.stringify({...entry,patientName});
+    const fd=new FormData();
+    fd.append("data",JSON.stringify({...entry,patientName}));
     const controller=new AbortController();
-    const timer=setTimeout(()=>controller.abort(),10000);
-    await fetch(SCRIPT_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:"data="+encodeURIComponent(payload),signal:controller.signal});
+    const timer=setTimeout(()=>controller.abort(),8000); // 8s timeout
+    await fetch(SCRIPT_URL,{method:"POST",mode:"no-cors",body:fd,signal:controller.signal});
     clearTimeout(timer);
     return{ok:true};
   }catch(e){
@@ -194,38 +186,13 @@ const syncToSheet=async(entry,patientName)=>{
   }
 };
 const syncAll=async(records,patientName,onProg)=>{
-  // v2.0.0: Batch upload — ส่งทุก records ในครั้งเดียว เร็วกว่าเดิม 10-50x
-  try{
-    onProg&&onProg(0,records.length);
-    const batchData=records.map(r=>({...r,patientName}));
-    const payload=JSON.stringify({type:"batch_sync",records:batchData,patientName,total:records.length});
-    const c=new AbortController();
-    const timer=setTimeout(()=>c.abort(),60000); // 60s timeout for batch
-    await fetch(SCRIPT_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:"data="+encodeURIComponent(payload),signal:c.signal});
-    clearTimeout(timer);
-    onProg&&onProg(records.length,records.length);
-    return{ok:records.length,fail:0};
-  }catch(e){
-    // Fallback: ส่งทีละ record ถ้า batch ไม่สำเร็จ
-    let ok=0,fail=0;
-    for(let i=0;i<records.length;i++){onProg&&onProg(i+1,records.length);const r=await syncToSheet(records[i],patientName);if(r.ok)ok++;else fail++;await new Promise(res=>setTimeout(res,200));}
-    return{ok,fail};
-  }
+  let ok=0,fail=0;
+  for(let i=0;i<records.length;i++){onProg&&onProg(i+1,records.length);const r=await syncToSheet(records[i],patientName);if(r.ok)ok++;else fail++;await new Promise(res=>setTimeout(res,350));}
+  return{ok,fail};
 };
 const notifyAdmin=async(patientName,phone,isTest=false)=>{
-  try{const payload=JSON.stringify({type:"payment_request",patientName,phone,adminEmail:ADMIN_EMAIL,adminLine:ADMIN_LINE,isTest,timestamp:new Date().toLocaleString("th-TH"),appVersion:APP_VERSION});await fetch(SCRIPT_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:"data="+encodeURIComponent(payload)});return{ok:true};}catch(e){return{ok:false};}
+  try{const fd=new FormData();fd.append("data",JSON.stringify({type:"payment_request",patientName,phone,adminEmail:ADMIN_EMAIL,adminLine:ADMIN_LINE,isTest,timestamp:new Date().toLocaleString("th-TH"),appVersion:APP_VERSION}));await fetch(SCRIPT_URL,{method:"POST",mode:"no-cors",body:fd});return{ok:true};}catch(e){return{ok:false};}
 };
-
-// ── Slip Upload → GAS → LINE Admin ──
-const sendSlipToAdmin=async(patientName,phone,imageBase64)=>{
-  try{
-    const payload=JSON.stringify({type:"payment_slip",patientName:patientName||"ไม่ระบุ",phone:phone||"ไม่ระบุ",imageBase64,timestamp:new Date().toLocaleString("th-TH"),appVersion:APP_VERSION});
-    const c=new AbortController();const t=setTimeout(()=>c.abort(),30000);
-    await fetch(SCRIPT_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:"data="+encodeURIComponent(payload),signal:c.signal});
-    clearTimeout(t);return{ok:true};
-  }catch(e){return{ok:false,err:e.message};}
-};
-const fileToBase64=(file)=>new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=()=>reject(new Error("read failed"));r.readAsDataURL(file);});
 
 // ── Input Component ──────────────────────────────
 const Input=({label,value,onChange,type="text",placeholder,unit,readOnly,scale=1})=>(
@@ -304,22 +271,13 @@ const Paywall=({adminCfg,onUnlock,onBack,lang="TH",scale=1})=>{
         [loading,setLoading]=useState(false),
         [notified,setNotified]=useState(false),
         [nLoading,setNLoading]=useState(false),
-        [phone,setPhone]=useState(""),
-        [slipStatus,setSlipStatus]=useState("idle"),
-        [slipPreview,setSlipPreview]=useState(null);
+        [phone,setPhone]=useState("");
   const tryUnlock=async()=>{if(!code.trim())return;setLoading(true);const v=await verifyCode("unlock",code.trim());setLoading(false);if(v)onUnlock();else{setErr(true);setTimeout(()=>setErr(false),2500);}};
   const doNotify=async()=>{if(!phone.trim())return;setNLoading(true);await notifyAdmin(adminCfg.patientName||"ไม่ระบุ",phone,false);setNLoading(false);setNotified(true);};
-  const handleSlipSelect=async(e)=>{
-    const file=e.target.files[0];if(!file)return;
-    setSlipPreview(URL.createObjectURL(file));setSlipStatus("sending");
-    try{const base64=await fileToBase64(file);const res=await sendSlipToAdmin(adminCfg.patientName||"ไม่ระบุ",phone||adminCfg.phone||"",base64);setSlipStatus(res.ok?"sent":"error");}catch{setSlipStatus("error");}
-    e.target.value="";
-  };
   const fs=FS[scale]||1;
-  const qrUrl=adminCfg.qrUrl&&adminCfg.qrUrl.startsWith("http")?adminCfg.qrUrl:null;
   return(
     <div style={{position:"fixed",inset:0,background:"rgba(2,132,199,0.97)",zIndex:900,display:"flex",alignItems:"center",justifyContent:"center",padding:16,fontFamily:"Sarabun,sans-serif",overflowY:"auto"}}>
-      <div style={{background:"white",borderRadius:24,padding:24,width:"100%",maxWidth:420,margin:"auto",maxHeight:"95vh",overflowY:"auto"}}>
+      <div style={{background:"white",borderRadius:24,padding:24,width:"100%",maxWidth:400,margin:"auto"}}>
         <button onClick={onBack} style={{display:"flex",alignItems:"center",gap:6,background:"none",border:"none",color:"#64748b",fontSize:Math.round(16*fs),cursor:"pointer",fontFamily:"Sarabun,sans-serif",marginBottom:12,padding:0}}>
           ← {lang==="EN"?"Back":"ย้อนกลับ"}
         </button>
@@ -327,51 +285,23 @@ const Paywall=({adminCfg,onUnlock,onBack,lang="TH",scale=1})=>{
           <div style={{color:"#0284c7",marginBottom:6}}>{Ic.Lock(Math.round(48*fs))}</div>
           <div style={{fontSize:Math.round(22*fs),fontWeight:800,color:"#0369a1"}}>{lang==="EN"?"Trial Ended":"หมดระยะทดลองใช้"}</div>
         </div>
-
-        {/* ข้อมูลการโอนเงิน */}
-        {(adminCfg.price||adminCfg.bankName)&&(
+        {(adminCfg.price||adminCfg.qrUrl||adminCfg.bankName)&&(
           <div style={{background:"#f0f9ff",borderRadius:14,padding:"14px 16px",marginBottom:14,fontSize:Math.round(15*fs),lineHeight:2}}>
-            <div style={{fontWeight:800,color:"#0369a1",marginBottom:4}}>{t.payTo||"โอนเงินไปที่"}</div>
-            {adminCfg.price&&<div>💰 {lang==="EN"?"Price":"ราคา"}: <strong style={{fontSize:Math.round(20*fs),color:"#0284c7"}}>{adminCfg.price}</strong></div>}
+            {adminCfg.price&&<div>💰 {lang==="EN"?"Price":"ราคา"}: <strong>{adminCfg.price}</strong></div>}
             {adminCfg.bankName&&<div>🏦 {adminCfg.bankName}</div>}
-            {adminCfg.accountNo&&<div>📋 <strong>{adminCfg.accountNo}</strong></div>}
+            {adminCfg.accountNo&&<div>📋 {adminCfg.accountNo}</div>}
             {adminCfg.accountName&&<div>👤 {adminCfg.accountName}</div>}
             {adminCfg.phone&&<div>{Ic.Phone(16)} {adminCfg.phone}</div>}
           </div>
         )}
-
-        {/* QR Code — FIX: ตรวจสอบ URL ที่ถูกต้อง */}
-        {qrUrl&&(
-          <div style={{textAlign:"center",marginBottom:14}}>
-            <div style={{fontSize:Math.round(15*fs),fontWeight:800,color:"#0369a1",marginBottom:8,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>{Ic.QR(18)} {t.scanQR||"สแกน QR โอนเงิน"}</div>
-            <div style={{display:"inline-block",padding:8,background:"white",borderRadius:14,border:"3px solid #0284c7",boxShadow:"0 4px 16px rgba(2,132,199,0.2)"}}>
-              <img src={qrUrl} alt="QR" style={{width:Math.round(200*fs),height:Math.round(200*fs),display:"block",borderRadius:8,objectFit:"contain"}} onError={e=>{e.target.parentElement.style.display="none";}}/>
-            </div>
-          </div>
-        )}
-
-        {/* ส่งสลิปโอนเงิน */}
-        <div style={{background:"#fef3c7",borderRadius:14,padding:14,marginBottom:14,border:"2px solid #fcd34d"}}>
-          <div style={{fontSize:Math.round(16*fs),fontWeight:800,color:"#92400e",marginBottom:10,display:"flex",alignItems:"center",gap:6}}>
-            {Ic.Paperclip(18)} {t.sendSlip||"📎 ส่งสลิปโอนเงิน"}
-          </div>
-          <input value={phone} onChange={e=>setPhone(e.target.value)} placeholder={t.yourPhone}
-            style={{width:"100%",padding:10,borderRadius:10,border:"1.5px solid #fde68a",fontSize:Math.round(15*fs),fontFamily:"Sarabun,sans-serif",boxSizing:"border-box",marginBottom:10,outline:"none"}}/>
-          {slipPreview&&<div style={{textAlign:"center",marginBottom:10}}><img src={slipPreview} alt="slip" style={{width:Math.round(120*fs),borderRadius:10,border:"2px solid #e2e8f0"}}/></div>}
-          {slipStatus==="sent"&&<div style={{textAlign:"center",padding:"10px 0",color:"#166534",fontWeight:700,fontSize:Math.round(15*fs)}}>{Ic.Check(20)} {t.slipSent||"✅ ส่งสลิปเรียบร้อย"}</div>}
-          {slipStatus==="error"&&<div style={{textAlign:"center",padding:"6px 0",color:"#991b1b",fontWeight:700,fontSize:Math.round(14*fs),marginBottom:8}}>{t.slipFail||"❌ ส่งไม่สำเร็จ"}</div>}
-          <label style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,width:"100%",padding:Math.round(14*fs),background:slipStatus==="sending"?"#94a3b8":"linear-gradient(135deg,#f59e0b,#d97706)",color:"white",border:"none",borderRadius:12,fontSize:Math.round(17*fs),fontWeight:800,fontFamily:"Sarabun,sans-serif",cursor:"pointer"}}>
-            {slipStatus==="sending"?(t.slipSending||"⏳..."):<>{Ic.ImageIcon(20)} {t.selectSlip||"เลือกรูปสลิป"}</>}
-            <input type="file" accept="image/*" capture="environment" onChange={handleSlipSelect} disabled={slipStatus==="sending"} style={{display:"none"}}/>
-          </label>
-        </div>
-
-        {/* แจ้งชำระเงิน (ไม่มีสลิป) */}
+        {(adminCfg.qrUrl&&adminCfg.qrUrl.startsWith("http"))&&<div style={{textAlign:"center",marginBottom:14}}><img src={adminCfg.qrUrl} alt="QR" style={{width:Math.round(180*fs),height:Math.round(180*fs),borderRadius:12,border:"2px solid #e2e8f0"}} onError={e=>e.target.style.display="none"}/></div>}
         {!notified?(
-          <div style={{background:"#f0fdf4",borderRadius:12,padding:14,marginBottom:14}}>
-            <div style={{fontSize:Math.round(14*fs),fontWeight:700,color:"#166534",marginBottom:8}}>{t.notifyPay} ({lang==="EN"?"no slip":"ไม่มีสลิป"})</div>
+          <div style={{background:"#fefce8",borderRadius:12,padding:14,marginBottom:14}}>
+            <div style={{fontSize:Math.round(15*fs),fontWeight:700,color:"#92400e",marginBottom:8}}>{t.notifyPay}</div>
+            <input value={phone} onChange={e=>setPhone(e.target.value)} placeholder={t.yourPhone}
+              style={{width:"100%",padding:12,borderRadius:10,border:"1.5px solid #fde68a",fontSize:Math.round(17*fs),fontFamily:"Sarabun,sans-serif",boxSizing:"border-box",marginBottom:10,outline:"none"}}/>
             <button onClick={doNotify} disabled={nLoading||!phone}
-              style={{width:"100%",padding:12,background:nLoading?"#94a3b8":"linear-gradient(135deg,#059669,#047857)",color:"white",border:"none",borderRadius:10,fontSize:Math.round(16*fs),fontWeight:800,fontFamily:"Sarabun,sans-serif",cursor:"pointer"}}>
+              style={{width:"100%",padding:13,background:nLoading?"#94a3b8":"linear-gradient(135deg,#f59e0b,#d97706)",color:"white",border:"none",borderRadius:10,fontSize:Math.round(17*fs),fontWeight:800,fontFamily:"Sarabun,sans-serif",cursor:"pointer"}}>
               {nLoading?"⏳...":t.notifyPay}
             </button>
           </div>
@@ -382,8 +312,6 @@ const Paywall=({adminCfg,onUnlock,onBack,lang="TH",scale=1})=>{
             <div style={{fontSize:Math.round(14*fs),color:"#15803d"}}>Line: {ADMIN_LINE}</div>
           </div>
         )}
-
-        {/* ใส่รหัสปลดล็อค */}
         <input value={code} onChange={e=>setCode(e.target.value)} onKeyDown={e=>e.key==="Enter"&&tryUnlock()} placeholder={t.enterCode}
           style={{width:"100%",padding:14,borderRadius:12,border:`2px solid ${err?"#ef4444":"#cbd5e1"}`,fontSize:Math.round(18*fs),fontFamily:"Sarabun,sans-serif",boxSizing:"border-box",textAlign:"center",fontWeight:700,outline:"none",marginBottom:err?6:12}}/>
         {err&&<div style={{color:"#ef4444",fontSize:Math.round(14*fs),marginBottom:8,textAlign:"center"}}>❌ {lang==="EN"?"Invalid code":"รหัสไม่ถูกต้อง"}</div>}
@@ -445,11 +373,11 @@ export default function App(){
 
   // ── INIT ──────────────────────────────────────
   useEffect(()=>{
-    setRecords(lsGet(KEY_RECORDS,[]).sort((a,b)=>a.date.localeCompare(b.date)));
+    setRecords(lsGet(KEY_RECORDS,[]));
     setPatient(lsGet(KEY_PATIENT,{name:"",phone:""}));
     setAdminCfg(lsGet(KEY_ADMIN,{unlockCode:"",qrUrl:"",bankName:"",accountNo:"",accountName:"",price:"",phone:"",adminPass:""}));
     setLastBackup(lsRaw(KEY_BACKUP_TS));
-    setLastSheetSync(lsRaw(KEY_SHEET_TS)||"");
+    setLastSheetSync(lsRaw("bp-sheet-sync-ts")||"");
     const unlocked=lsGet(KEY_UNLOCKED,false);
     setIsUnlocked(unlocked);
 
@@ -478,7 +406,7 @@ export default function App(){
             // Server ไม่ตอบ → fallback localStorage
             let inst=localStorage.getItem("bp-install-date");
             if(!inst){inst=new Date().toISOString();localStorage.setItem("bp-install-date",inst);}
-            const used=Math.floor((Date.now()-new Date(inst).getTime())/86400000);
+            const used=Math.floor((Date.now()-new Date(inst))/86400000);
             result={ok:true,daysLeft:Math.max(0,TRIAL_DAYS-used),daysUsed:used,expired:used>=TRIAL_DAYS};
           }
         }
@@ -533,10 +461,10 @@ export default function App(){
       eveningSys:form.eveningSys||ex?.eveningSys||"",
       eveningDia:form.eveningSys?form.eveningDia:(ex?.eveningDia||""),
       eveningPulse:form.eveningSys?form.eveningPulse:(ex?.eveningPulse||""),};
-    const next=idx>=0?records.map((r,i)=>i===idx?entry:r).sort((a,b)=>a.date.localeCompare(b.date)):[...records,entry].sort((a,b)=>a.date.localeCompare(b.date));
+    const next=idx>=0?records.map((r,i)=>i===idx?entry:r):[...records,entry].sort((a,b)=>a.date.localeCompare(b.date));
     setRecords(next);lsSet(KEY_RECORDS,next);
     const res=await syncToSheet(entry,patient.name);
-    if(res.ok){const ts=nowStr();localStorage.setItem(KEY_SHEET_TS,ts);setLastSheetSync(ts);setSheetStatus("ok");}
+    if(res.ok){const ts=nowStr();localStorage.setItem("bp-sheet-sync-ts",ts);setLastSheetSync(ts);setSheetStatus("ok");}
     else setSheetStatus("error");
     toast$(res.ok?`✅ ${ex?"อัปเดต":"บันทึก"} + Google Sheets`:`💾 ${ex?"อัปเดต":"บันทึก"} (ออฟไลน์)`,res.ok?"ok":"warn");
     setForm(emptyForm);setEditRecord(null);setSaving(false);setTab("history");
@@ -562,13 +490,13 @@ export default function App(){
     setSyncing(true);setSyncProg({current:0,total:records.length});
     const res=await syncAll(records,patient.name,(cur,tot)=>setSyncProg({current:cur,total:tot}));
     setSyncing(false);setSyncProg(null);
-    if(res.fail===0){const ts=nowStr();localStorage.setItem(KEY_SHEET_TS,ts);setLastSheetSync(ts);setSheetStatus("ok");}
+    if(res.fail===0){const ts=nowStr();localStorage.setItem("bp-sheet-sync-ts",ts);setLastSheetSync(ts);setSheetStatus("ok");}
     else setSheetStatus(res.ok>0?"ok":"error");
     toast$(res.fail===0?`✅ ${t.backupSheets} (${res.ok})`:`⚠️ ${res.ok}/${records.length}`,res.fail===0?"ok":"warn",5000);
   };
   const importBackup=e=>{
     const file=e.target.files[0];if(!file)return;
-    const r=new FileReader();r.onload=ev=>{try{const d=JSON.parse(ev.target.result);if(d.records){const sorted=[...d.records].sort((a,b)=>a.date.localeCompare(b.date));setRecords(sorted);lsSet(KEY_RECORDS,sorted);}if(d.patient){setPatient(d.patient);lsSet(KEY_PATIENT,d.patient);}toast$(`📤 ${d.records?.length||0} records`);}catch{toast$("Invalid file","err");}};
+    const r=new FileReader();r.onload=ev=>{try{const d=JSON.parse(ev.target.result);if(d.records){setRecords(d.records);lsSet(KEY_RECORDS,d.records);}if(d.patient){setPatient(d.patient);lsSet(KEY_PATIENT,d.patient);}toast$(`📤 ${d.records?.length||0} records`);}catch{toast$("Invalid file","err");}};
     r.readAsText(file);e.target.value="";
   };
   const testBackup=async()=>{
@@ -726,7 +654,7 @@ export default function App(){
                 <div style={{fontSize:Math.round(38*fs),fontWeight:800,color:"#0284c7",lineHeight:1.1}}>{adminCfg.price}</div>
                 <div style={{fontSize:Math.round(14*fs),color:"#22c55e",fontWeight:700,marginTop:4}}>{Ic.Check(16)}{" "}{lang==="EN"?"One-time payment, lifetime use":"จ่ายครั้งเดียว ใช้ได้ตลอดชีพ"}</div>
               </div>}
-              {adminCfg.qrUrl&&adminCfg.qrUrl.startsWith("http")?(
+              {(adminCfg.qrUrl&&adminCfg.qrUrl.startsWith("http"))?(
                 <div style={{textAlign:"center",marginBottom:14}}>
                   <div style={{fontSize:Math.round(15*fs),fontWeight:800,color:"#0369a1",marginBottom:10,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>{Ic.QR(20)}{" "}{lang==="EN"?"Scan QR to Pay":"สแกน QR โอนเงินได้เลย"}</div>
                   <div style={{display:"inline-block",padding:10,background:"white",borderRadius:16,border:"3px solid #0284c7",boxShadow:"0 4px 16px rgba(2,132,199,0.2)"}}>
