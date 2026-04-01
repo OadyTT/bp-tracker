@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 
 // ═══════════════════════════════════════════════
 const APP_VERSION  = "v2.0.1";
-const BUILD_DATE   = "27 มี.ค. 2568";
+const BUILD_DATE   = "1 เม.ย. 2568";
 const TRIAL_DAYS   = 60;
 const ADMIN_EMAIL  = "thitiphankk@gmail.com";
 const ADMIN_LINE   = "Oady";
@@ -1072,7 +1072,7 @@ export default function App(){
               <div style={{fontSize:Math.round(17*fs),marginTop:6}}>{t.startRecord}</div>
             </div>
           ):(
-            [...records].reverse().map(r=>{
+            [...records].sort((a,b)=>a.date.localeCompare(b.date)).reverse().map(r=>{
               const ms=bpStatus(r.morningSys,r.morningDia),es=bpStatus(r.eveningSys,r.eveningDia);
               const worst=rank(ms)>=rank(es)?(ms||es):(es||ms);
               return(
