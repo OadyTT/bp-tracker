@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 
 // ═══════════════════════════════════════════════
-const APP_VERSION  = "v1.8.3";
+const APP_VERSION  = "v2.0.1";
 const BUILD_DATE   = "31 มี.ค. 2568";
 const TRIAL_DAYS   = 60;
 const ADMIN_EMAIL  = "thitiphankk@gmail.com";
