@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 
 // ═══════════════════════════════════════════════
 const APP_VERSION  = "v2.0.1";
-const BUILD_DATE   = "1 เม.ย. 2568";
+const BUILD_DATE   = "27 มี.ค. 2568";
 const TRIAL_DAYS   = 60;
 const ADMIN_EMAIL  = "thitiphankk@gmail.com";
 const ADMIN_LINE   = "Oady";
@@ -16,7 +16,7 @@ const KEY_FONTSCALE= "bp-fontscale";
 const KEY_DEVICE   = "bp-device-id";
 const KEY_TRIAL_TOK= "bp-trial-token";
 const KEY_SHEET_TS = "bp-sheet-sync-ts";
-const SCRIPT_URL   = "https://script.google.com/macros/s/AKfycbxM33dLeillQUUizPrVRsjGWvhPkS2X54DDT41fe5Fev6Y7tnOBt8ds3EAmEtPoYYp58A/exec";
+const SCRIPT_URL   = "https://script.google.com/macros/s/AKfycbxN0gf9mWMF9I4fCazGo4WhyWONrStPMiwuM-Xnc6GZSRk7iXf1V6E_HR5NPPkWB2eZ9w/exec";
 // ═══════════════════════════════════════════════
 
 // ── i18n ────────────────────────────────────────
@@ -332,7 +332,7 @@ const Paywall=({adminCfg,onUnlock,onBack,lang="TH",scale=1})=>{
         {(adminCfg.price||adminCfg.bankName)&&(
           <div style={{background:"#f0f9ff",borderRadius:14,padding:"14px 16px",marginBottom:14,fontSize:Math.round(15*fs),lineHeight:2}}>
             <div style={{fontWeight:800,color:"#0369a1",marginBottom:4}}>{t.payTo||"โอนเงินไปที่"}</div>
-            {adminCfg.price&&<div>💰 {lang==="EN"?"Price":"ราคา"}: <strong style={{fontSize:Math.round(20*fs),color:"#0284c7"}}>{adminCfg.price}</strong></div>}
+            {adminCfg.price&&<div>💰 {lang==="EN"?"Price":"ราคา"}: <strong style={{fontSize:Math.round(22*fs),color:"#0284c7"}}>{adminCfg.price} {lang==="EN"?"THB":"บาท"}</strong></div>}
             {adminCfg.bankName&&<div>🏦 {adminCfg.bankName}</div>}
             {adminCfg.accountNo&&<div>📋 <strong>{adminCfg.accountNo}</strong></div>}
             {adminCfg.accountName&&<div>👤 {adminCfg.accountName}</div>}
@@ -700,7 +700,7 @@ export default function App(){
                 <div style={{padding:"14px 8px",background:"linear-gradient(135deg,#0284c7,#075985)",borderBottom:"2px solid #0369a1"}}>
                   <div style={{color:"white"}}>{Ic.Gem(Math.round(20*fs))}</div>
                   <div style={{fontWeight:800,fontSize:Math.round(14*fs),marginTop:2,color:"white"}}>{t.fullVer}</div>
-                  <div style={{fontSize:Math.round(12*fs),color:"#bae6fd"}}>{adminCfg.price||(lang==="EN"?"One-time":"จ่ายครั้งเดียว")}</div>
+                  <div style={{fontSize:Math.round(15*fs),color:"white",fontWeight:700,marginTop:4,background:"rgba(255,255,255,0.2)",borderRadius:8,padding:"4px 8px",display:"inline-block"}}>{adminCfg.price?(lang==="EN"?adminCfg.price+" THB":adminCfg.price+" บาท"):(lang==="EN"?"One-time":"จ่ายครั้งเดียว")}</div>
                 </div>
               </div>
               {[
@@ -723,7 +723,7 @@ export default function App(){
             <div style={{margin:"16px 14px 0",background:"white",borderRadius:18,padding:Math.round(20*fs),boxShadow:"0 4px 16px rgba(0,0,0,0.1)"}}>
               {adminCfg.price&&<div style={{textAlign:"center",marginBottom:14}}>
                 <div style={{fontSize:Math.round(13*fs),color:"#64748b"}}>{lang==="EN"?"Special Price":"ราคาพิเศษ"}</div>
-                <div style={{fontSize:Math.round(38*fs),fontWeight:800,color:"#0284c7",lineHeight:1.1}}>{adminCfg.price}</div>
+                <div style={{fontSize:Math.round(42*fs),fontWeight:800,color:"#0284c7",lineHeight:1.1}}>{adminCfg.price} <span style={{fontSize:Math.round(20*fs),color:"#64748b"}}>{lang==="EN"?"THB":"บาท"}</span></div>
                 <div style={{fontSize:Math.round(14*fs),color:"#22c55e",fontWeight:700,marginTop:4}}>{Ic.Check(16)}{" "}{lang==="EN"?"One-time payment, lifetime use":"จ่ายครั้งเดียว ใช้ได้ตลอดชีพ"}</div>
               </div>}
               {adminCfg.qrUrl&&adminCfg.qrUrl.startsWith("http")?(
@@ -940,7 +940,7 @@ export default function App(){
                 <div style={{color:"white"}}>{Ic.Gem(Math.round(32*fs))}</div>
                 <div style={{flex:1}}>
                   <div style={{color:"white",fontWeight:800,fontSize:Math.round(15*fs),marginBottom:2}}>{t.upgrade}</div>
-                  <div style={{color:"#93c5fd",fontSize:Math.round(12*fs)}}>{lang==="EN"?"Graph · Advice · PDF · Unlimited":"กราฟ · คำแนะนำ · PDF · ไม่จำกัดวัน"}{adminCfg.price?` · ${adminCfg.price}`:""}</div>
+                  <div style={{color:"#93c5fd",fontSize:Math.round(12*fs)}}>{lang==="EN"?"Graph · Advice · PDF · Unlimited":"กราฟ · คำแนะนำ · PDF · ไม่จำกัดวัน"}{adminCfg.price?` · ${adminCfg.price} ${lang==="EN"?"THB":"บาท"}`:""}</div>
                 </div>
                 <div style={{color:"#60a5fa",fontSize:Math.round(22*fs)}}>›</div>
               </button>
@@ -1072,7 +1072,7 @@ export default function App(){
               <div style={{fontSize:Math.round(17*fs),marginTop:6}}>{t.startRecord}</div>
             </div>
           ):(
-            [...records].sort((a,b)=>a.date.localeCompare(b.date)).reverse().map(r=>{
+            [...records].reverse().map(r=>{
               const ms=bpStatus(r.morningSys,r.morningDia),es=bpStatus(r.eveningSys,r.eveningDia);
               const worst=rank(ms)>=rank(es)?(ms||es):(es||ms);
               return(
